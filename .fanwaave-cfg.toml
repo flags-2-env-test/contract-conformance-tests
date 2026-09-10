@@ -1,0 +1,54 @@
+version = 1
+mode = "server"
+strict = true
+
+[flags2env]
+contract = ".cli-flags.toml"
+require_audit = true
+precedence = "argv-over-env"
+
+[[env]]
+name = "api_base_url"
+key = "FANWAAVE_API_BASE_URL"
+kind = "url"
+required = false
+secret = false
+default = "http://127.0.0.1:8080"
+description = "Synthetic public API base URL for test clients."
+
+[[env]]
+name = "bind_addr"
+key = "FANWAAVE_BIND_ADDR"
+kind = "string"
+required = false
+secret = false
+default = "127.0.0.1:8080"
+description = "Synthetic server bind address."
+
+[[env]]
+name = "auth_token"
+key = "FANWAAVE_AUTH_TOKEN"
+kind = "string"
+required = false
+secret = true
+description = "Environment-only synthetic credential reference; no value or default is committed."
+
+[[env]]
+name = "redis_url"
+key = "REDIS_URL"
+kind = "url"
+required = true
+secret = true
+description = "Environment-only Redis URI shared with middleware/rate-limit/LRU test contracts."
+
+[[env]]
+name = "rate_limit_hmac_key"
+key = "ORES_RL_HMAC_KEY"
+kind = "string"
+required = true
+secret = true
+description = "Environment-only rate-limit HMAC key reference."
+
+[server]
+enabled = true
+bind_addr_binding = "bind_addr"
