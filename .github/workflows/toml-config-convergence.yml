@@ -2,6 +2,11 @@ name: TOML config convergence
 
 on:
   workflow_call:
+    inputs:
+      harness_ref:
+        description: Exact immutable commit SHA of this reusable harness.
+        required: true
+        type: string
   pull_request:
     paths:
       - ".cli-flags.toml"
@@ -55,10 +60,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: flags-2-env-test/contract-conformance-tests
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ inputs.harness_ref || github.sha }}
           path: _tools/toml-harness
           persist-credentials: false
           show-progress: false
+
+      - name: Verify exact reusable harness revision
+        env:
+          EXPECTED_HARNESS_REF: ${{ inputs.harness_ref || github.sha }}
+        run: test "$(git -C _tools/toml-harness rev-parse HEAD)" = "$EXPECTED_HARNESS_REF"
 
       - name: Check out admitted middleware runtime
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
