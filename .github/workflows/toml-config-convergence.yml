@@ -1,0 +1,208 @@
+name: TOML config convergence
+
+on:
+  workflow_call:
+  pull_request:
+    paths:
+      - ".cli-flags.toml"
+      - ".ores-mw.toml"
+      - ".ores-rl.toml"
+      - ".ores-lru.toml"
+      - ".shared-auth.toml"
+      - ".auth-shared.toml"
+      - "scripts/verify_toml_config_convergence.py"
+      - "upstream-snapshots/**"
+      - ".github/workflows/toml-config-convergence.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".cli-flags.toml"
+      - ".ores-mw.toml"
+      - ".ores-rl.toml"
+      - ".ores-lru.toml"
+      - ".shared-auth.toml"
+      - ".auth-shared.toml"
+      - "scripts/verify_toml_config_convergence.py"
+      - "upstream-snapshots/**"
+      - ".github/workflows/toml-config-convergence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: toml-config-convergence-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  convergence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact caller candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Check out exact reusable harness revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: flags-2-env-test/contract-conformance-tests
+          ref: ${{ github.workflow_sha }}
+          path: _tools/toml-harness
+          persist-credentials: false
+          show-progress: false
+
+      - name: Check out admitted middleware runtime
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ORESoftware/ores-middleware
+          ref: 0ba59b36777345989788f8cd4687c10735546c3d
+          path: _tools/ores-middleware
+          persist-credentials: false
+          show-progress: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: ""
+
+      - name: Execute canonical middleware manifest admission
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 _tools/ores-middleware/scripts/ores_mw_config.py \
+            --manifest "$GITHUB_WORKSPACE/.ores-mw.toml" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            check
+
+      - name: Execute cross-contract and adversarial convergence suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 _tools/toml-harness/scripts/verify_toml_config_convergence.py \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --receipt ".toml-config-evidence/receipt.json"
+
+      - name: Check out reviewed TJSV
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ORESoftware/typespec-json-schema-validator
+          ref: 4473504c4c9d2831d825919f70c03994d8ce01d2
+          path: _tools/tjsv
+          persist-credentials: false
+          show-progress: false
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.16.0
+          cache: npm
+          cache-dependency-path: _tools/tjsv/package-lock.json
+
+      - name: Install exact TJSV toolchain
+        run: npm ci --prefix _tools/tjsv --no-audit --no-fund
+
+      - name: Prepare immutable authority inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/toml-tjsv"
+          mkdir -p "$root/middleware"
+          cp _tools/ores-middleware/contracts/ores-mw-config/typespec/main.tsp "$root/middleware/main.tsp"
+          cp _tools/ores-middleware/contracts/ores-mw-config/json-schema/ores-mw-config.schema.json "$root/middleware/authored.schema.json"
+          cp -R _tools/ores-middleware/contracts/tjsv-instances/ores-mw-config "$root/middleware/instances"
+          cp -R _tools/toml-harness/upstream-snapshots "$root/snapshots"
+          ln -s "$GITHUB_WORKSPACE/_tools/tjsv/node_modules" "$root/node_modules"
+
+      - name: Recompute TJSV parity for all TOML authorities
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/toml-tjsv"
+          cli="$GITHUB_WORKSPACE/_tools/tjsv/bin/typespec-json-schema-validator.mjs"
+          evidence="$GITHUB_WORKSPACE/.typespec-json-schema-validator/toml-convergence"
+          mkdir -p "$evidence"
+
+          run_check() {
+            name="$1"
+            tsp="$2"
+            schema="$3"
+            mapping="$4"
+            int64="$5"
+            seal="$6"
+            instances="$7"
+            args=(
+              check
+              "--typespec=$tsp"
+              "--schema=$schema"
+              "--report=$evidence/$name.report.json"
+              "--contract-ir=$evidence/$name.contract-ir.json"
+              "--output-dir=$evidence/$name-generated"
+              "--int64-strategy=$int64"
+              "--seal-object-schemas=$seal"
+              "--polymorphic-models-strategy=oneOf"
+              "--format-assertion=false"
+              "--max-probes=64"
+              "--quiet=true"
+            )
+            if test -n "$mapping"; then
+              args+=("--mapping=$mapping")
+            fi
+            if test -n "$instances"; then
+              args+=("--instances=$instances")
+            fi
+            node "$cli" "${args[@]}"
+            jq -e '
+              .schema == "ores.typespec-json-schema-validator.report/v1" and
+              .status == "passed" and
+              .zeroUnexplainedFindings == true and
+              .authorities.precedence == "none" and
+              .authorities.typespec.authority == "independently-authored" and
+              .authorities.jsonSchema.authority == "independently-authored" and
+              (.differential.summary.divergences // 0) == 0 and
+              (.differential.summary.refusals // 0) == 0
+            ' "$evidence/$name.report.json" >/dev/null
+            jq -e '
+              .schema == "ores.typespec-json-schema-validator.contract-ir/v1" and
+              .status == "passed" and
+              .admissible == true and
+              .role == "downstream-derived-parity-artifact" and
+              .editableAuthority == false
+            ' "$evidence/$name.contract-ir.json" >/dev/null
+          }
+
+          run_check middleware \
+            "$root/middleware/main.tsp" \
+            "$root/middleware/authored.schema.json" \
+            "" string false \
+            "$root/middleware/instances"
+
+          run_check rate-limit \
+            "$root/snapshots/rate-limit/main.tsp" \
+            "$root/snapshots/rate-limit/authored.schema.json" \
+            "$root/snapshots/rate-limit/mapping.json" number true ""
+
+          run_check lru \
+            "$root/snapshots/lru/main.tsp" \
+            "$root/snapshots/lru/authored.schema.json" \
+            "" string true ""
+
+          run_check shared-auth \
+            "$root/snapshots/shared-auth/main.tsp" \
+            "$root/snapshots/shared-auth/authored.schema.json" \
+            "" string true ""
+
+      - name: Retain convergence evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: toml-config-convergence-${{ github.sha }}
+          path: |
+            .toml-config-evidence
+            .typespec-json-schema-validator/toml-convergence
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30

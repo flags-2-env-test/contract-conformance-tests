@@ -1,0 +1,39 @@
+schema_version = 1
+repository_mode = "server-only"
+default_target = "server"
+
+[flags2env]
+contract = ".cli-flags.toml"
+require_audit = true
+precedence = "argv-over-env"
+
+[[env]]
+name = "redis_url"
+key = "REDIS_URL"
+kind = "url"
+required = true
+secret = true
+description = "Synthetic Redis credential URI delivered only through the test runtime environment."
+
+[[env]]
+name = "rate_limit_hmac_key"
+key = "ORES_RL_HMAC_KEY"
+kind = "string"
+required = true
+secret = true
+description = "Synthetic rate-limit HMAC key delivered only through the test runtime environment."
+
+[[env]]
+name = "port"
+key = "PORT"
+kind = "integer"
+required = false
+secret = false
+default = "8080"
+description = "Synthetic test listener port."
+
+[[targets]]
+name = "server"
+role = "server"
+roots = ["."]
+middleware = "disabled"

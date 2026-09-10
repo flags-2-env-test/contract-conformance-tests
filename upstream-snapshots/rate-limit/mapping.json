@@ -1,0 +1,23 @@
+{
+  "schema": "ores.typespec-json-schema-validator.mapping/v1",
+  "declarations": [
+    {"typespec": "OresRateLimit.RateLimitRepositoryLayout", "generated": "RateLimitRepositoryLayout", "authored": "RateLimitRepositoryLayout"},
+    {"typespec": "OresRateLimit.RateLimitConfigBackend", "generated": "RateLimitConfigBackend", "authored": "RateLimitConfigBackend"},
+    {"typespec": "OresRateLimit.RateLimitConfigAlgorithm", "generated": "RateLimitConfigAlgorithm", "authored": "RateLimitConfigAlgorithm"},
+    {"typespec": "OresRateLimit.RateLimitConfigEnforcementMode", "generated": "RateLimitConfigEnforcementMode", "authored": "RateLimitConfigEnforcementMode"},
+    {"typespec": "OresRateLimit.RateLimitConfigConsistencyMode", "generated": "RateLimitConfigConsistencyMode", "authored": "RateLimitConfigConsistencyMode"},
+    {"typespec": "OresRateLimit.RateLimitConfigBackendFailureMode", "generated": "RateLimitConfigBackendFailureMode", "authored": "RateLimitConfigBackendFailureMode"},
+    {"typespec": "OresRateLimit.RateLimitConfigIdentityScope", "generated": "RateLimitConfigIdentityScope", "authored": "RateLimitConfigIdentityScope"},
+    {"typespec": "OresRateLimit.RateLimitConfigDenyCacheMode", "generated": "RateLimitConfigDenyCacheMode", "authored": "RateLimitConfigDenyCacheMode"},
+    {"typespec": "OresRateLimit.RateLimitConfigEnforcementLayer", "generated": "RateLimitConfigEnforcementLayer", "authored": "RateLimitConfigEnforcementLayer"},
+    {"typespec": "OresRateLimit.RateLimitClientConfigV1", "generated": "RateLimitClientConfigV1", "authored": "RateLimitClientConfigV1"},
+    {"typespec": "OresRateLimit.RateLimitServerConfigV1", "generated": "RateLimitServerConfigV1", "authored": "RateLimitServerConfigV1"},
+    {"typespec": "OresRateLimit.RateLimitPolicyConfigV1", "generated": "RateLimitPolicyConfigV1", "authored": "RateLimitPolicyConfigV1"},
+    {"typespec": "OresRateLimit.RateLimitConfigV1", "generated": "RateLimitConfigV1", "authored": "RateLimitConfigV1"}
+  ],
+  "ignore": {
+    "typespec": [],
+    "generated": [],
+    "authored": []
+  }
+}

@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/rate-limit/rate-limit-config.v1.schema.json",
+  "title": "RateLimitConfigV1AuthoritySet",
+  "description": "Independent JSON Schema authority for the normalized .ores-rl.toml runtime configuration contract.",
+  "x-ores-authority": "independent-peer",
+  "$defs": {
+    "RateLimitRepositoryLayout": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitRepositoryLayout",
+      "type": "string",
+      "enum": ["client-only", "server-only", "combined"]
+    },
+    "RateLimitConfigBackend": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitConfigBackend",
+      "type": "string",
+      "enum": ["local", "redis"]
+    },
+    "RateLimitConfigAlgorithm": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitConfigAlgorithm",
+      "type": "string",
+      "enum": ["token-bucket", "fixed-window", "sliding-window", "gcra"]
+    },
+    "RateLimitConfigEnforcementMode": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitConfigEnforcementMode",
+      "type": "string",
+      "enum": ["enforce", "observe-only", "disabled"]
+    },
+    "RateLimitConfigConsistencyMode": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitConfigConsistencyMode",
+      "type": "string",
+      "enum": ["strict", "bounded", "advisory"]
+    },
+    "RateLimitConfigBackendFailureMode": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitConfigBackendFailureMode",
+      "type": "string",
+      "enum": ["fail-open", "fail-closed", "local-fallback"]
+    },
+    "RateLimitConfigIdentityScope": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitConfigIdentityScope",
+      "type": "string",
+      "enum": ["anonymous-ip", "authenticated-subject", "authenticated-tenant-subject"]
+    },
+    "RateLimitConfigDenyCacheMode": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitConfigDenyCacheMode",
+      "type": "string",
+      "enum": ["local-denials", "redis-denial-fanout", "redis-strict-blocks"]
+    },
+    "RateLimitConfigEnforcementLayer": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitConfigEnforcementLayer",
+      "type": "string",
+      "enum": ["edge", "load-balancer", "service", "authentication", "data-store"]
+    },
+    "RateLimitClientConfigV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitClientConfigV1",
+      "type": "object",
+      "properties": {
+        "root": {"type": "string", "minLength": 1, "maxLength": 255},
+        "exposePolicyMetadata": {"type": "boolean"}
+      },
+      "required": ["root", "exposePolicyMetadata"],
+      "unevaluatedProperties": false
+    },
+    "RateLimitServerConfigV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitServerConfigV1",
+      "type": "object",
+      "properties": {
+        "root": {"type": "string", "minLength": 1, "maxLength": 255},
+        "backend": {"$ref": "RateLimitConfigBackend"},
+        "enforcementLayer": {"$ref": "RateLimitConfigEnforcementLayer"},
+        "redisUrlEnv": {"type": "string", "minLength": 1, "maxLength": 128},
+        "keyHmacEnv": {"type": "string", "minLength": 1, "maxLength": 128}
+      },
+      "required": ["root", "backend", "enforcementLayer", "keyHmacEnv"],
+      "unevaluatedProperties": false
+    },
+    "RateLimitPolicyConfigV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitPolicyConfigV1",
+      "type": "object",
+      "properties": {
+        "policyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"
+        },
+        "clientVisible": {"type": "boolean"},
+        "algorithm": {"$ref": "RateLimitConfigAlgorithm"},
+        "identityScope": {"$ref": "RateLimitConfigIdentityScope"},
+        "capacity": {"type": "integer", "minimum": 1, "maximum": 1000000000},
+        "windowMs": {"type": "integer", "minimum": 0, "maximum": 2678400000},
+        "refillTokens": {"type": "integer", "minimum": 0, "maximum": 1000000000},
+        "refillIntervalMs": {"type": "integer", "minimum": 0, "maximum": 2678400000},
+        "requestCost": {"type": "integer", "minimum": 1, "maximum": 1000000000},
+        "enforcementMode": {"$ref": "RateLimitConfigEnforcementMode"},
+        "consistencyMode": {"$ref": "RateLimitConfigConsistencyMode"},
+        "backendFailureMode": {"$ref": "RateLimitConfigBackendFailureMode"},
+        "denyCacheMode": {"$ref": "RateLimitConfigDenyCacheMode"},
+        "denyCacheCapacity": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "maxOvershoot": {"type": "integer", "minimum": 0, "maximum": 1000000000},
+        "maxBlockTtlMs": {"type": "integer", "minimum": 1, "maximum": 3600000},
+        "keyVersion": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32,
+          "pattern": "^v[1-9][0-9]*$"
+        },
+        "policyVersion": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}
+      },
+      "required": [
+        "policyId",
+        "clientVisible",
+        "algorithm",
+        "identityScope",
+        "capacity",
+        "windowMs",
+        "refillTokens",
+        "refillIntervalMs",
+        "requestCost",
+        "enforcementMode",
+        "consistencyMode",
+        "backendFailureMode",
+        "denyCacheMode",
+        "denyCacheCapacity",
+        "maxOvershoot",
+        "maxBlockTtlMs",
+        "keyVersion",
+        "policyVersion"
+      ],
+      "unevaluatedProperties": false
+    },
+    "RateLimitConfigV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitConfigV1",
+      "type": "object",
+      "properties": {
+        "schemaVersion": {"type": "string", "const": "ores.rate-limit.config.v1"},
+        "layout": {"$ref": "RateLimitRepositoryLayout"},
+        "defaultPolicyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"
+        },
+        "client": {"$ref": "RateLimitClientConfigV1"},
+        "server": {"$ref": "RateLimitServerConfigV1"},
+        "policies": {
+          "type": "array",
+          "items": {"$ref": "RateLimitPolicyConfigV1"}
+        }
+      },
+      "required": ["schemaVersion", "layout", "defaultPolicyId", "policies"],
+      "unevaluatedProperties": false
+    }
+  }
+}
