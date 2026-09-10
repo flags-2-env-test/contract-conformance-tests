@@ -1,0 +1,135 @@
+name: Shared Auth schema parity candidate
+
+on:
+  pull_request:
+    paths:
+      - 'candidate-evidence/shared-auth/**'
+      - '.github/workflows/shared-auth-schema-parity-candidate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'candidate-evidence/shared-auth/**'
+      - '.github/workflows/shared-auth-schema-parity-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-auth-schema-parity-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          show-progress: false
+
+      - name: Verify candidate provenance and exact source blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+
+          root = Path('candidate-evidence/shared-auth')
+          provenance = json.loads((root / 'provenance.json').read_text())
+          assert provenance['schema'] == 'ores.downstream-authority-snapshot/v1'
+          assert provenance['role'] == 'downstream-test-evidence-only'
+          assert provenance['editableAuthority'] is False
+          assert provenance['source'] == {
+              'repository': 'shared-auth/shared-auth-interfaces',
+              'pullRequest': 54,
+              'candidateCommit': '4795458f3a2b21d3171b9b9883cca3976cbb5ef0',
+          }
+          assert provenance['authorities']['precedence'] == 'none'
+          expected = {
+              'main.tsp': '4fa968339bf99e255fecf75ddbdbde6e1e309cdd',
+              'authored.schema.json': 'afceb1a4cc02026f3c0a0d9e0607356037e151e2',
+          }
+          for name, blob in expected.items():
+              actual = subprocess.check_output(['git', 'hash-object', str(root / name)], text=True).strip()
+              if actual != blob:
+                  raise SystemExit(f'{name} source blob drift: {actual} != {blob}')
+          for lane in ('typespec', 'jsonSchema'):
+              assert provenance['authorities'][lane]['authority'] == 'independently-authored'
+          PY
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.16.0
+          cache: ''
+
+      - name: Check out immutable TJSV
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ORESoftware/typespec-json-schema-validator
+          ref: 4473504c4c9d2831d825919f70c03994d8ce01d2
+          path: _tools/tjsv
+          persist-credentials: false
+          fetch-depth: 1
+          show-progress: false
+
+      - name: Install exact TJSV toolchain
+        run: npm ci --prefix _tools/tjsv --no-audit --no-fund
+
+      - name: Recompute peer-authority parity and Contract IR
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/shared-auth-candidate"
+          evidence="$GITHUB_WORKSPACE/.typespec-json-schema-validator/shared-auth-candidate"
+          mkdir -p "$work" "$evidence"
+          cp candidate-evidence/shared-auth/main.tsp "$work/main.tsp"
+          cp candidate-evidence/shared-auth/authored.schema.json "$work/authored.schema.json"
+          ln -s "$GITHUB_WORKSPACE/_tools/tjsv/node_modules" "$work/node_modules"
+          node _tools/tjsv/bin/typespec-json-schema-validator.mjs check \
+            --typespec="$work/main.tsp" \
+            --schema="$work/authored.schema.json" \
+            --report="$evidence/report.json" \
+            --contract-ir="$evidence/contract-ir.json" \
+            --output-dir="$evidence/generated" \
+            --int64-strategy=string \
+            --seal-object-schemas=true \
+            --polymorphic-models-strategy=oneOf \
+            --format-assertion=false \
+            --max-probes=64 \
+            --quiet=true
+
+          jq -e '
+            .schema == "ores.typespec-json-schema-validator.report/v1" and
+            .status == "passed" and
+            .zeroUnexplainedFindings == true and
+            .authorities.precedence == "none" and
+            .authorities.typespec.authority == "independently-authored" and
+            .authorities.jsonSchema.authority == "independently-authored" and
+            (.differential.summary.divergences // 0) == 0 and
+            (.differential.summary.refusals // 0) == 0
+          ' "$evidence/report.json" >/dev/null
+
+          jq -e '
+            .schema == "ores.typespec-json-schema-validator.contract-ir/v1" and
+            .status == "passed" and
+            .admissible == true and
+            .role == "downstream-derived-parity-artifact" and
+            .editableAuthority == false
+          ' "$evidence/contract-ir.json" >/dev/null
+
+      - name: Retain candidate admission evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: shared-auth-schema-parity-${{ github.sha }}
+          path: .typespec-json-schema-validator/shared-auth-candidate
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
