@@ -8,9 +8,12 @@ on:
       - ".ores-mw.toml"
       - ".ores-rl.toml"
       - ".ores-lru.toml"
+      - ".fanwaave-cfg.toml"
+      - ".ores-rpc.toml"
       - ".shared-auth.toml"
       - ".auth-shared.toml"
       - "scripts/verify_toml_config_convergence.py"
+      - "scripts/verify_toml_config_family.py"
       - "upstream-snapshots/**"
       - ".github/workflows/toml-config-convergence.yml"
   push:
@@ -20,9 +23,12 @@ on:
       - ".ores-mw.toml"
       - ".ores-rl.toml"
       - ".ores-lru.toml"
+      - ".fanwaave-cfg.toml"
+      - ".ores-rpc.toml"
       - ".shared-auth.toml"
       - ".auth-shared.toml"
       - "scripts/verify_toml_config_convergence.py"
+      - "scripts/verify_toml_config_family.py"
       - "upstream-snapshots/**"
       - ".github/workflows/toml-config-convergence.yml"
   workflow_dispatch:
@@ -37,7 +43,7 @@ concurrency:
 jobs:
   convergence:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Check out exact caller candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -63,6 +69,24 @@ jobs:
           persist-credentials: false
           show-progress: false
 
+      - name: Check out Fanwaave peer authorities
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: fanwaave/fanwaave-interfaces
+          ref: e27695091a5b8276543a6f435156a25043f297a9
+          path: _authorities/fanwaave
+          persist-credentials: false
+          show-progress: false
+
+      - name: Check out RPC peer authorities
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ORESoftware/api-docs
+          ref: 12127a82ff1c0c34096faaf6df1a2a8484ea2feb
+          path: _authorities/api-docs
+          persist-credentials: false
+          show-progress: false
+
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
@@ -78,11 +102,11 @@ jobs:
             --repo-root "$GITHUB_WORKSPACE" \
             check
 
-      - name: Execute cross-contract and adversarial convergence suite
+      - name: Execute full cross-contract and adversarial convergence suite
         shell: bash
         run: |
           set -euo pipefail
-          python3 _tools/toml-harness/scripts/verify_toml_config_convergence.py \
+          python3 _tools/toml-harness/scripts/verify_toml_config_family.py \
             --repo-root "$GITHUB_WORKSPACE" \
             --receipt ".toml-config-evidence/receipt.json"
 
@@ -90,10 +114,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: ORESoftware/typespec-json-schema-validator
-          ref: 4473504c4c9d2831d825919f70c03994d8ce01d2
+          ref: 7241f8e52dcc4518c72f0fdb5152d6cf66c86656
           path: _tools/tjsv
           persist-credentials: false
           show-progress: false
+
+      - name: Verify exact TJSV revision
+        run: test "$(git -C _tools/tjsv rev-parse HEAD)" = "7241f8e52dcc4518c72f0fdb5152d6cf66c86656"
 
       - name: Set up pinned Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
@@ -110,14 +137,19 @@ jobs:
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/toml-tjsv"
-          mkdir -p "$root/middleware"
+          mkdir -p "$root/middleware" "$root/fanwaave" "$root/rpc"
           cp _tools/ores-middleware/contracts/ores-mw-config/typespec/main.tsp "$root/middleware/main.tsp"
           cp _tools/ores-middleware/contracts/ores-mw-config/json-schema/ores-mw-config.schema.json "$root/middleware/authored.schema.json"
           cp -R _tools/ores-middleware/contracts/tjsv-instances/ores-mw-config "$root/middleware/instances"
           cp -R _tools/toml-harness/upstream-snapshots "$root/snapshots"
+          cp _authorities/fanwaave/contracts/fanwaave-config/fanwaave-config.tsp "$root/fanwaave/main.tsp"
+          cp _authorities/fanwaave/contracts/fanwaave-config/fanwaave-config.schema.json "$root/fanwaave/authored.schema.json"
+          cp _authorities/api-docs/contracts/ores-rpc-config/typespec/main.tsp "$root/rpc/main.tsp"
+          cp _authorities/api-docs/contracts/ores-rpc-config/json-schema/ores-rpc-config.schema.json "$root/rpc/authored.schema.json"
+          cp _authorities/api-docs/contracts/ores-rpc-config/tjsv.mapping.json "$root/rpc/mapping.json"
           ln -s "$GITHUB_WORKSPACE/_tools/tjsv/node_modules" "$root/node_modules"
 
-      - name: Recompute TJSV parity for all TOML authorities
+      - name: Recompute TJSV parity for every TOML authority pair
         shell: bash
         run: |
           set -euo pipefail
@@ -162,6 +194,7 @@ jobs:
               .authorities.precedence == "none" and
               .authorities.typespec.authority == "independently-authored" and
               .authorities.jsonSchema.authority == "independently-authored" and
+              .authorities.typespec.generatedJsonSchemaRole == "comparison-evidence-only" and
               (.differential.summary.divergences // 0) == 0 and
               (.differential.summary.refusals // 0) == 0
             ' "$evidence/$name.report.json" >/dev/null
@@ -194,6 +227,16 @@ jobs:
             "$root/snapshots/shared-auth/main.tsp" \
             "$root/snapshots/shared-auth/authored.schema.json" \
             "" string true ""
+
+          run_check fanwaave \
+            "$root/fanwaave/main.tsp" \
+            "$root/fanwaave/authored.schema.json" \
+            "" string true ""
+
+          run_check rpc \
+            "$root/rpc/main.tsp" \
+            "$root/rpc/authored.schema.json" \
+            "$root/rpc/mapping.json" number true ""
 
       - name: Retain convergence evidence
         if: always()
