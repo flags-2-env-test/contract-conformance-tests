@@ -1,0 +1,44 @@
+[help]
+url = "https://github.com/flags-2-env-test/contract-conformance-tests"
+columns = ["options", "env", "type", "default", "description"]
+
+[env]
+load = false
+
+[parse]
+allow_unknown = false
+
+[flags.port]
+env = "PORT"
+aliases = ["port"]
+type = "integer"
+default = 8080
+help = "Synthetic test listener port."
+
+[flags.log-filter]
+env = "RUST_LOG"
+aliases = ["log-filter"]
+type = "string"
+default = "info"
+help = "Synthetic test log filter."
+
+[flags.fanwaave-api-base-url]
+env = "FANWAAVE_API_BASE_URL"
+aliases = ["fanwaave-api-base-url"]
+type = "string"
+default = "http://127.0.0.1:8080"
+help = "Synthetic public Fanwaave API base URL; never a credential."
+
+[flags.fanwaave-bind-addr]
+env = "FANWAAVE_BIND_ADDR"
+aliases = ["fanwaave-bind-addr"]
+type = "string"
+default = "127.0.0.1:8080"
+help = "Synthetic Fanwaave server bind address."
+
+[flags.ores-rpc-max-frame-bytes]
+env = "ORES_RPC_MAX_FRAME_BYTES"
+aliases = ["ores-rpc-max-frame-bytes"]
+type = "integer"
+default = 8388608
+help = "Synthetic non-secret RPC frame-size override."

@@ -1,0 +1,29 @@
+schemaVersion = "ores.rpc.config.v1"
+repositoryMode = "server-only"
+strict = true
+flagsContract = ".cli-flags.toml"
+defaultTarget = "server"
+
+[[env]]
+name = "maxFrameBytes"
+env = "ORES_RPC_MAX_FRAME_BYTES"
+valueType = "integer"
+required = false
+secret = false
+allowArgv = true
+
+[[env]]
+name = "authToken"
+env = "ORES_RPC_AUTH_TOKEN"
+valueType = "string"
+required = false
+secret = true
+allowArgv = false
+
+[[targets]]
+name = "server"
+role = "server"
+roots = ["."]
+rpcVersion = "v1"
+transports = ["http"]
+framing = "json"

@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ores.dev/lru-redis/v1/authored.schema.json",
+  "$defs": {
+    "CacheOperation": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "CacheOperation",
+      "type": "string",
+      "enum": ["upsert", "delete", "replace", "invalidate", "resync"]
+    },
+    "BackendSyncMode": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "BackendSyncMode",
+      "type": "string",
+      "enum": ["local_only", "read_only", "write_through", "bidirectional"]
+    },
+    "UpsertOverflowMode": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "UpsertOverflowMode",
+      "type": "string",
+      "enum": ["evict_lru", "reject_and_reconcile"]
+    },
+    "RepositoryRole": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RepositoryRole",
+      "type": "string",
+      "enum": ["client", "server"]
+    },
+    "RedisTransportConfig": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RedisTransportConfig",
+      "type": "object",
+      "properties": {
+        "urlEnv": { "type": "string" },
+        "keyPrefix": { "type": "string" },
+        "pubsubChannel": { "type": "string" },
+        "reconcileIntervalMs": { "type": "integer" },
+        "reconnectMinMs": { "type": "integer" },
+        "reconnectMaxMs": { "type": "integer" }
+      },
+      "required": [
+        "urlEnv",
+        "keyPrefix",
+        "pubsubChannel",
+        "reconcileIntervalMs",
+        "reconnectMinMs",
+        "reconnectMaxMs"
+      ],
+      "unevaluatedProperties": false
+    },
+    "CacheDefaults": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "CacheDefaults",
+      "type": "object",
+      "properties": {
+        "capacity": { "type": "integer" },
+        "syncMode": { "$ref": "BackendSyncMode" },
+        "overflowMode": { "$ref": "UpsertOverflowMode" },
+        "failOpenOnStartup": { "type": "boolean" }
+      },
+      "required": ["capacity", "syncMode", "overflowMode", "failOpenOnStartup"],
+      "unevaluatedProperties": false
+    },
+    "RoleConfig": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RoleConfig",
+      "type": "object",
+      "properties": {
+        "role": { "$ref": "RepositoryRole" },
+        "capacity": { "type": "integer" },
+        "syncMode": { "$ref": "BackendSyncMode" },
+        "overflowMode": { "$ref": "UpsertOverflowMode" },
+        "failOpenOnStartup": { "type": "boolean" }
+      },
+      "required": ["role"],
+      "unevaluatedProperties": false
+    },
+    "ConfiguredCache": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ConfiguredCache",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "role": { "$ref": "RepositoryRole" },
+        "capacity": { "type": "integer" },
+        "syncMode": { "$ref": "BackendSyncMode" },
+        "overflowMode": { "$ref": "UpsertOverflowMode" },
+        "failOpenOnStartup": { "type": "boolean" }
+      },
+      "required": ["name", "role"],
+      "unevaluatedProperties": false
+    },
+    "OresLruConfig": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "OresLruConfig",
+      "type": "object",
+      "properties": {
+        "protocol": { "type": "string", "const": "ores.lru-config.v1" },
+        "namespace": { "type": "string" },
+        "roles": {
+          "type": "array",
+          "items": { "$ref": "RepositoryRole" }
+        },
+        "redis": { "$ref": "RedisTransportConfig" },
+        "defaults": { "$ref": "CacheDefaults" },
+        "roleOverrides": {
+          "type": "array",
+          "items": { "$ref": "RoleConfig" }
+        },
+        "caches": {
+          "type": "array",
+          "items": { "$ref": "ConfiguredCache" }
+        }
+      },
+      "required": ["protocol", "namespace", "roles", "defaults", "caches"],
+      "unevaluatedProperties": false
+    },
+    "CacheEntry": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "CacheEntry",
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "value": { "type": "string" }
+      },
+      "required": ["key", "value"],
+      "unevaluatedProperties": false
+    },
+    "CacheState": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "CacheState",
+      "type": "object",
+      "properties": {
+        "revision": { "type": "integer" },
+        "ready": { "type": "boolean" },
+        "stale": { "type": "boolean" },
+        "entryCount": { "type": "integer" }
+      },
+      "required": ["revision", "ready", "stale", "entryCount"],
+      "unevaluatedProperties": false
+    },
+    "CacheSnapshot": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "CacheSnapshot",
+      "type": "object",
+      "properties": {
+        "revision": { "type": "integer" },
+        "entries": {
+          "type": "array",
+          "items": { "$ref": "CacheEntry" }
+        }
+      },
+      "required": ["revision", "entries"],
+      "unevaluatedProperties": false
+    },
+    "CacheEvent": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "CacheEvent",
+      "type": "object",
+      "properties": {
+        "protocol": { "type": "string", "const": "ores.lru-redis.v1" },
+        "namespace": { "type": "string" },
+        "cache": { "type": "string" },
+        "revision": { "type": "integer" },
+        "operation": { "$ref": "CacheOperation" },
+        "entries": {
+          "type": "array",
+          "items": { "$ref": "CacheEntry" }
+        },
+        "keys": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "source": { "type": "string" },
+        "publishedAt": { "type": "string" }
+      },
+      "required": [
+        "protocol",
+        "namespace",
+        "cache",
+        "revision",
+        "operation",
+        "source",
+        "publishedAt"
+      ],
+      "unevaluatedProperties": false
+    },
+    "RateLimitBlock": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RateLimitBlock",
+      "type": "object",
+      "properties": {
+        "protocol": { "type": "string", "const": "ores.rate-limit.block.v1" },
+        "policyId": { "type": "string" },
+        "keyVersion": { "type": "string" },
+        "issuedAtUnixMs": { "type": "integer" },
+        "expiresAtUnixMs": { "type": "integer" },
+        "reasonCode": { "type": "string" }
+      },
+      "required": [
+        "protocol",
+        "policyId",
+        "keyVersion",
+        "issuedAtUnixMs",
+        "expiresAtUnixMs",
+        "reasonCode"
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}
