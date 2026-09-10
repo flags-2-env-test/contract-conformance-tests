@@ -1,0 +1,24 @@
+{
+  "schema": "ores.downstream-authority-snapshot/v1",
+  "role": "downstream-test-evidence-only",
+  "editableAuthority": false,
+  "source": {
+    "repository": "shared-auth/shared-auth-interfaces",
+    "pullRequest": 54,
+    "candidateCommit": "4795458f3a2b21d3171b9b9883cca3976cbb5ef0"
+  },
+  "authorities": {
+    "typespec": {
+      "path": "contracts/shared-auth-config/main.tsp",
+      "gitBlob": "4fa968339bf99e255fecf75ddbdbde6e1e309cdd",
+      "authority": "independently-authored"
+    },
+    "jsonSchema": {
+      "path": "schema/shared-auth-config.schema.json",
+      "gitBlob": "afceb1a4cc02026f3c0a0d9e0607356037e151e2",
+      "authority": "independently-authored"
+    },
+    "precedence": "none"
+  },
+  "purpose": "Verify the schema_version number-vs-integer parity repair with pinned TJSV before source promotion."
+}
