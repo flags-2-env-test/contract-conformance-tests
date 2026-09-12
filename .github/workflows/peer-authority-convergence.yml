@@ -15,6 +15,10 @@ on:
         description: Repository-relative TJSV positive/negative instance corpus.
         required: true
         type: string
+      expected_declarations_json:
+        description: Exact JSON array of qualified declarations admitted for this canary.
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -22,7 +26,7 @@ permissions:
 jobs:
   convergence:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Check out exact caller candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -35,6 +39,7 @@ jobs:
         env:
           TYPESPEC_PATH: ${{ inputs.typespec_path }}
           SCHEMA_PATH: ${{ inputs.schema_path }}
+          EXPECTED_DECLARATIONS: ${{ inputs.expected_declarations_json }}
         run: |
           set -euo pipefail
           safe_relative_authority() {
@@ -58,6 +63,7 @@ jobs:
           safe_relative_authority "$SCHEMA_PATH"
           case "$TYPESPEC_PATH" in *.tsp) ;; *) exit 6 ;; esac
           case "$SCHEMA_PATH" in *.json) ;; *) exit 6 ;; esac
+          node -e 'const value=JSON.parse(process.argv[1]); if (!Array.isArray(value)||value.length===0||value.some((x)=>typeof x!=="string"||!x.includes("."))||new Set(value).size!==value.length) process.exit(7)' "$EXPECTED_DECLARATIONS"
 
       - name: Bind independently authored authority bytes
         shell: bash
@@ -69,18 +75,30 @@ jobs:
           mkdir -p "$RUNNER_TEMP/peer-authority"
           sha256sum "$TYPESPEC_PATH" "$SCHEMA_PATH" > "$RUNNER_TEMP/peer-authority/authorities.before.sha256"
 
-      - name: Compile TypeSpec to comparison JSON and compare both peer authorities
+      - name: Compile TypeSpec to comparison Schema B and compare peer authorities
         uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
         with:
           typespec: ${{ inputs.typespec_path }}
           schema: ${{ inputs.schema_path }}
           instances: ${{ inputs.instances_path }}
           report: .typespec-json-schema-validator/peer-authority/report.json
+          sarif: .typespec-json-schema-validator/peer-authority/report.sarif
           contract_ir: .typespec-json-schema-validator/peer-authority/contract-ir.json
           output_dir: .typespec-json-schema-validator/peer-authority/generated
           quiet: 'false'
 
-      - name: Prove Schema B comparison and dual-authority admission
+      - name: Verify current inputs, generated Schema B, receipt, IR, and exact declaration scope
+        uses: ORESoftware/typespec-json-schema-validator/actions/verify-contract-ir@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        with:
+          contract_ir: .typespec-json-schema-validator/peer-authority/contract-ir.json
+          report: .typespec-json-schema-validator/peer-authority/report.json
+          typespec: ${{ inputs.typespec_path }}
+          schema: ${{ inputs.schema_path }}
+          generated_schema: .typespec-json-schema-validator/peer-authority/generated/typespec.generated.schema.json
+          expected_declarations: ${{ inputs.expected_declarations_json }}
+          verification: .typespec-json-schema-validator/peer-authority/consumer-verification.json
+
+      - name: Prove Schema B comparison and first-class peer-authority admission
         shell: bash
         env:
           TYPESPEC_PATH: ${{ inputs.typespec_path }}
@@ -89,40 +107,19 @@ jobs:
           set -euo pipefail
           node - <<'NODE'
           const fs = require('node:fs');
-          const reportPath = '.typespec-json-schema-validator/peer-authority/report.json';
-          const irPath = '.typespec-json-schema-validator/peer-authority/contract-ir.json';
-          const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
-          const ir = JSON.parse(fs.readFileSync(irPath, 'utf8'));
-
+          const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/peer-authority/report.json', 'utf8'));
+          const ir = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/peer-authority/contract-ir.json', 'utf8'));
           const fail = (message) => { throw new Error(message); };
-          if (report.schema !== 'ores.typespec-json-schema-validator.report/v1') {
-            fail('unexpected parity report schema');
-          }
-          if (report.status !== 'passed' || report.zeroUnexplainedFindings !== true) {
-            fail('peer-authority parity did not pass cleanly');
-          }
-          if (report.authorities?.typespec?.authority !== 'independently-authored') {
-            fail('TypeSpec is not recorded as an independently authored authority');
-          }
-          if (report.authorities?.jsonSchema?.authority !== 'independently-authored') {
-            fail('JSON Schema is not recorded as an independently authored authority');
-          }
-          if (report.authorities?.jsonSchema?.dialect !== 'https://json-schema.org/draft/2020-12/schema') {
-            fail('authored JSON Schema is not Draft 2020-12');
-          }
-          if (report.authorities?.typespec?.generatedJsonSchemaRole !== 'comparison-evidence-only') {
-            fail('TypeSpec-generated JSON Schema is not comparison-only evidence');
-          }
-          if (report.authorities?.precedence !== 'none') {
-            fail('one authored authority incorrectly has precedence');
-          }
 
-          for (const key of [
-            'directDeclarationInventory',
-            'typespecGeneratedJsonSchemaComparison',
-            'differentialInstanceValidation',
-            'sourceMutationCheck',
-          ]) {
+          if (report.schema !== 'ores.typespec-json-schema-validator.report/v1') fail('unexpected parity report schema');
+          if (report.status !== 'passed' || report.zeroUnexplainedFindings !== true) fail('peer-authority parity did not pass cleanly');
+          if (report.authorities?.typespec?.authority !== 'independently-authored') fail('TypeSpec is not independently authored');
+          if (report.authorities?.jsonSchema?.authority !== 'independently-authored') fail('JSON Schema is not independently authored');
+          if (report.authorities?.jsonSchema?.dialect !== 'https://json-schema.org/draft/2020-12/schema') fail('JSON Schema is not Draft 2020-12');
+          if (report.authorities?.typespec?.generatedJsonSchemaRole !== 'comparison-evidence-only') fail('Schema B is not comparison-only evidence');
+          if (report.authorities?.precedence !== 'none') fail('one authored authority incorrectly has precedence');
+
+          for (const key of ['directDeclarationInventory','typespecGeneratedJsonSchemaComparison','differentialInstanceValidation','sourceMutationCheck']) {
             if (report.coverage?.[key] !== true) fail(`required TJSV coverage missing: ${key}`);
           }
 
@@ -130,42 +127,88 @@ jobs:
           for (const key of ['typespec', 'authoredJsonSchema', 'generatedJsonSchema']) {
             if (!inputs[key]?.input || !inputs[key]?.digest) fail(`missing bound report input: ${key}`);
           }
-          if (inputs.typespec.input !== process.env.TYPESPEC_PATH) {
-            fail('report TypeSpec input is not the caller-authored authority');
-          }
-          if (inputs.authoredJsonSchema.input !== process.env.SCHEMA_PATH) {
-            fail('report JSON Schema input is not the caller-authored authority');
-          }
-          if (inputs.generatedJsonSchema.input === inputs.authoredJsonSchema.input) {
-            fail('generated Schema B collided with authored JSON Schema A');
-          }
-          if (!inputs.generatedJsonSchema.input.includes('.typespec-json-schema-validator/peer-authority/generated/')) {
-            fail('generated Schema B escaped the comparison-evidence output lane');
-          }
+          if (inputs.typespec.input !== process.env.TYPESPEC_PATH) fail('report TypeSpec input is not caller authority');
+          if (inputs.authoredJsonSchema.input !== process.env.SCHEMA_PATH) fail('report JSON Schema input is not caller authority');
+          if (inputs.generatedJsonSchema.input === inputs.authoredJsonSchema.input) fail('generated Schema B collided with authored Schema A');
+          if (!inputs.generatedJsonSchema.input.includes('.typespec-json-schema-validator/peer-authority/generated/')) fail('Schema B escaped evidence lane');
 
           const differential = report.differential?.summary;
-          if (!differential || !Number.isInteger(differential.probesEvaluated) || differential.probesEvaluated <= 0) {
-            fail('no differential probes were evaluated against both schema lanes');
-          }
-          if (differential.divergences !== 0 || differential.refusals !== 0) {
-            fail('generated and authored JSON Schema lanes disagree on differential probes');
-          }
+          if (!differential || !Number.isInteger(differential.probesEvaluated) || differential.probesEvaluated <= 0) fail('no differential probes evaluated');
+          if (differential.divergences !== 0 || differential.refusals !== 0) fail('generated and authored schema lanes disagree');
 
-          const expectedIrAuthorities = {
-            typespec: 'independently-authored',
-            jsonSchema: 'independently-authored',
-            generatedJsonSchema: 'comparison-evidence-only',
-            precedence: 'none',
-          };
-          for (const [key, value] of Object.entries(expectedIrAuthorities)) {
+          const expected = { typespec: 'independently-authored', jsonSchema: 'independently-authored', generatedJsonSchema: 'comparison-evidence-only', precedence: 'none' };
+          for (const [key, value] of Object.entries(expected)) {
             if (ir.authorities?.[key] !== value) fail(`unexpected Contract IR authority role: ${key}`);
           }
-          if (ir.status !== 'passed' || ir.admissible !== true) {
-            fail('Contract IR is not admissible');
-          }
+          if (ir.status !== 'passed' || ir.admissible !== true || ir.admission?.scope?.complete !== true) fail('Contract IR is not complete/admissible');
+          NODE
+
+      - name: Create temporary JSON-Schema-only drift witness
+        shell: bash
+        env:
+          SCHEMA_PATH: ${{ inputs.schema_path }}
+        run: |
+          set -euo pipefail
+          mkdir -p target/tjsv-negative-control
+          cp "$SCHEMA_PATH" target/tjsv-negative-control/authored.schema.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = 'target/tjsv-negative-control/authored.schema.json';
+          const schema = JSON.parse(fs.readFileSync(path, 'utf8'));
+          let mutated = false;
+          const visit = (node) => {
+            if (mutated || !node || typeof node !== 'object' || Array.isArray(node)) return;
+            if (node.type === 'object' && node.properties && typeof node.properties === 'object' && !Array.isArray(node.properties)) {
+              const marker = '__tjsvNegativeControl';
+              if (Object.prototype.hasOwnProperty.call(node.properties, marker)) throw new Error('negative-control marker already exists');
+              node.properties[marker] = { type: 'string', const: 'drift-must-fail' };
+              const required = Array.isArray(node.required) ? [...node.required] : [];
+              if (!required.includes(marker)) required.push(marker);
+              node.required = required;
+              mutated = true;
+              return;
+            }
+            for (const value of Object.values(node)) visit(value);
+          };
+          visit(schema);
+          if (!mutated) throw new Error('no object schema with properties available for drift canary');
+          fs.writeFileSync(path, `${JSON.stringify(schema, null, 2)}\n`);
+          NODE
+
+      - name: Require one-authority JSON Schema drift to fail closed
+        id: negative_schema_drift
+        continue-on-error: true
+        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        with:
+          typespec: ${{ inputs.typespec_path }}
+          schema: target/tjsv-negative-control/authored.schema.json
+          instances: ${{ inputs.instances_path }}
+          report: .typespec-json-schema-validator/peer-authority/negative/report.json
+          contract_ir: .typespec-json-schema-validator/peer-authority/negative/contract-ir.json
+          output_dir: .typespec-json-schema-validator/peer-authority/negative/generated
+          quiet: 'false'
+
+      - name: Prove drift canary was rejected with non-admissible evidence
+        if: always()
+        shell: bash
+        env:
+          NEGATIVE_OUTCOME: ${{ steps.negative_schema_drift.outcome }}
+        run: |
+          set -euo pipefail
+          test "$NEGATIVE_OUTCOME" = failure
+          test -s .typespec-json-schema-validator/peer-authority/negative/report.json
+          test -s .typespec-json-schema-validator/peer-authority/negative/contract-ir.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/peer-authority/negative/report.json', 'utf8'));
+          const ir = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/peer-authority/negative/contract-ir.json', 'utf8'));
+          if (report.status === 'passed') throw new Error('TJSV incorrectly admitted one-authority drift');
+          if (!Array.isArray(report.findings) || report.findings.length === 0) throw new Error('drift rejection emitted no findings');
+          if (ir.status === 'passed' || ir.admissible === true) throw new Error('drift Contract IR remained admissible');
           NODE
 
       - name: Prove source immutability and generated comparison evidence
+        if: always()
         shell: bash
         env:
           TYPESPEC_PATH: ${{ inputs.typespec_path }}
@@ -175,18 +218,19 @@ jobs:
           sha256sum "$TYPESPEC_PATH" "$SCHEMA_PATH" > "$RUNNER_TEMP/peer-authority/authorities.after.sha256"
           cmp "$RUNNER_TEMP/peer-authority/authorities.before.sha256" "$RUNNER_TEMP/peer-authority/authorities.after.sha256"
           test -s .typespec-json-schema-validator/peer-authority/report.json
+          test -s .typespec-json-schema-validator/peer-authority/report.sarif
           test -s .typespec-json-schema-validator/peer-authority/contract-ir.json
-          generated="$(find .typespec-json-schema-validator/peer-authority/generated -type f -name '*.json' -size +0c -print -quit)"
-          test -n "$generated"
-          test "$generated" != "$SCHEMA_PATH"
+          test -s .typespec-json-schema-validator/peer-authority/generated/typespec.generated.schema.json
+          test -s .typespec-json-schema-validator/peer-authority/consumer-verification.json
+          test '.typespec-json-schema-validator/peer-authority/generated/typespec.generated.schema.json' != "$SCHEMA_PATH"
+          git diff --exit-code -- "$TYPESPEC_PATH" "$SCHEMA_PATH"
 
-      - name: Retain deterministic parity evidence
+      - name: Retain deterministic parity and drift-rejection evidence
         if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: peer-authority-tjsv-${{ github.sha }}
           path: .typespec-json-schema-validator/peer-authority/
-          if-no-files-found: warn
+          if-no-files-found: error
           include-hidden-files: true
           retention-days: 90
