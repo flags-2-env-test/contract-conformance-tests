@@ -50,7 +50,6 @@ pub(super) fn augment_contract_generated_evidence_audit(
     let mut inspected = 0usize;
     let mut authored_sources = 0usize;
     let mut generated_evidence = 0usize;
-    let mut overflow_reported = false;
 
     let walker = WalkDir::new(&contracts_root)
         .follow_links(false)
@@ -66,18 +65,15 @@ pub(super) fn augment_contract_generated_evidence_audit(
             continue;
         }
         if inspected >= MAX_FILES {
-            if !overflow_reported {
-                report.push(
-                    Finding::error(
-                        "contract-evidence-file-limit",
-                        format!(
-                            "contracts tree exceeds the {MAX_FILES}-file generated-evidence audit bound"
-                        ),
-                    )
-                    .with_target(CONTRACTS_DIRECTORY),
-                );
-                overflow_reported = true;
-            }
+            report.push(
+                Finding::error(
+                    "contract-evidence-file-limit",
+                    format!(
+                        "contracts tree exceeds the {MAX_FILES}-file generated-evidence audit bound"
+                    ),
+                )
+                .with_target(CONTRACTS_DIRECTORY),
+            );
             break;
         }
         inspected += 1;
@@ -180,7 +176,7 @@ mod tests {
     use serde_json::Value as JsonValue;
     use tempfile::tempdir;
 
-    use super::augment_contract_generated_evidence_audit;
+    use super::{MAX_FILES, augment_contract_generated_evidence_audit};
     use crate::audit::RepositoryAuditOptions;
     use crate::model::CommandReport;
 
@@ -284,7 +280,7 @@ mod tests {
             fs::create_dir_all(&evidence).expect("generated directory");
             fs::write(
                 evidence.join("typespec.generated.schema.json"),
-                r#"{"$schema":"https://json-schema.org/draft/2020-12/schema"}"#,
+                r#"{"schema":"https://json-schema.org/draft/2020-12/schema"}"#,
             )
             .expect("canonical generated schema B");
             fs::write(evidence.join("contract-ir.json"), "{}\n").expect("Contract IR");
@@ -331,5 +327,23 @@ mod tests {
                 finding.code == "authored-contract-source-in-generated-evidence"
             })
         );
+    }
+
+    #[test]
+    fn reports_file_limit_once_and_stops_scanning() {
+        let report = audit(|root| {
+            let directory = root.join("contracts/overflow");
+            fs::create_dir_all(&directory).expect("overflow directory");
+            for index in 0..=MAX_FILES {
+                fs::write(directory.join(format!("fixture-{index:04}.txt")), "x")
+                    .expect("overflow fixture");
+            }
+        });
+        let findings = report
+            .findings
+            .iter()
+            .filter(|finding| finding.code == "contract-evidence-file-limit")
+            .count();
+        assert_eq!(findings, 1);
     }
 }
