@@ -30,6 +30,13 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Reject generated or evidence paths as authored authorities
+        shell: bash
+        env:
+          TYPESPEC_PATH: ${{ inputs.typespec_path }}
+          SCHEMA_PATH: ${{ inputs.schema_path }}
+        run: sh scripts/check-peer-authority-paths.sh "$TYPESPEC_PATH" "$SCHEMA_PATH"
+
       - name: Bind independently authored authority bytes
         shell: bash
         env:
@@ -37,9 +44,6 @@ jobs:
           SCHEMA_PATH: ${{ inputs.schema_path }}
         run: |
           set -euo pipefail
-          test -f "$TYPESPEC_PATH"
-          test -f "$SCHEMA_PATH"
-          test "$TYPESPEC_PATH" != "$SCHEMA_PATH"
           mkdir -p "$RUNNER_TEMP/peer-authority"
           sha256sum "$TYPESPEC_PATH" "$SCHEMA_PATH" > "$RUNNER_TEMP/peer-authority/authorities.before.sha256"
 
