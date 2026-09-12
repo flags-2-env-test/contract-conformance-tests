@@ -47,9 +47,9 @@ jobs:
           test "$(git hash-object "$root/tests/contract_tree_external.rs")" = '66c3e70e8043a2c43f6aaad6370508ead643c1d7'
           test "$(git hash-object "$root/product/src/audit/mod.rs")" = '4b35617293ebe020eb9acc419e0c23c50b42688b'
           test "$(git hash-object "$root/product/src/lib.rs")" = '91961aa1613fed7e16bab18f7e8ee7ce72b47b77'
-          test "$(git hash-object "$root/product/tjsv/source-lock.json")" = '75c31a252c8fd10bc4159d54f154b10ed1afe21a'
-          test "$(git hash-object "$root/product/.github/workflows/interfaces-contract-tree.yml")" = '61bd3f47ad2c57723b1d800e2d6b4c82b9ef79c0'
-          jq -e '.revision == "93dd73cb246a09b0a1c62d7192cc62ca6ecbe405"' \
+          test "$(git hash-object "$root/product/tjsv/source-lock.json")" = '126bf1560a80de55acbb3edd66aaad159fbeb32a'
+          test "$(git hash-object "$root/product/.github/workflows/interfaces-contract-tree.yml")" = '8731533dd65377bf9685fc9002fd78cbbf612cf0'
+          jq -e '.revision == "07688e1eea92a666f7e8647038c9f2c1544440ed"' \
             "$root/product/tjsv/source-lock.json"
           grep -Fqx 'mod contract_generated_evidence;' "$root/product/src/audit/mod.rs"
           grep -Fqx 'mod contract_tree;' "$root/product/src/audit/mod.rs"
@@ -58,6 +58,8 @@ jobs:
           grep -Fq 'python_systems::audit(&root, report)' "$root/product/src/lib.rs"
           grep -Fq 'audit_contract_tree(&tree_options).await?' "$root/product/src/lib.rs"
           grep -Fq 'opto-sync-test/contract-conformance-tests' \
+            "$root/product/.github/workflows/interfaces-contract-tree.yml"
+          grep -Fq '9febec9b2d10c178b25f5aca8f8e7c8b3b70094c' \
             "$root/product/.github/workflows/interfaces-contract-tree.yml"
 
       - name: Install pinned Rust toolchain
@@ -70,7 +72,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ORESoftware/typespec-json-schema-validator
-          ref: 93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+          ref: 07688e1eea92a666f7e8647038c9f2c1544440ed
           path: .tjsv
           persist-credentials: false
           show-progress: false
@@ -133,7 +135,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: opto-sync-test/contract-conformance-tests
-          ref: 212bf5e589bdf63e064f34b2239acdd6f8b8df52
+          ref: 9febec9b2d10c178b25f5aca8f8e7c8b3b70094c
           path: test-repos/opto-sync
           persist-credentials: false
           show-progress: false
