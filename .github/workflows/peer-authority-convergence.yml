@@ -75,7 +75,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/peer-authority"
           sha256sum "$TYPESPEC_PATH" "$SCHEMA_PATH" > "$RUNNER_TEMP/peer-authority/authorities.before.sha256"
 
-      - name: Compile TypeSpec to comparison JSON and compare both peer authorities
+      - name: Compile TypeSpec to Schema B and compare it with authored Schema A
         uses: ORESoftware/typespec-json-schema-validator@c745036456dd80408b83217118b8563edb8f6abd
         with:
           typespec: ${{ inputs.typespec_path }}
@@ -97,34 +97,38 @@ jobs:
           generated_schema: .typespec-json-schema-validator/peer-authority/generated/typespec.generated.schema.json
           expected_declarations: ${{ inputs.expected_declarations_json }}
 
-      - name: Prove independent authority roles in admitted Contract IR
+      - name: Prove peer authorities and the TypeSpec to Schema B comparison lane
         shell: bash
         run: |
           set -euo pipefail
           node - <<'NODE'
           const fs = require('node:fs');
-          const path = '.typespec-json-schema-validator/peer-authority/contract-ir.json';
-          const ir = JSON.parse(fs.readFileSync(path, 'utf8'));
-          const expected = {
+          const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/peer-authority/report.json', 'utf8'));
+          const ir = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/peer-authority/contract-ir.json', 'utf8'));
+          const generated = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/peer-authority/generated/typespec.generated.schema.json', 'utf8'));
+
+          const expectedIrAuthorities = {
             typespec: 'independently-authored',
             jsonSchema: 'independently-authored',
             generatedJsonSchema: 'comparison-evidence-only',
             precedence: 'none',
           };
-          for (const [key, value] of Object.entries(expected)) {
-            if (ir.authorities?.[key] !== value) {
-              throw new Error(`unexpected Contract IR authority role: ${key}`);
-            }
+          for (const [key, value] of Object.entries(expectedIrAuthorities)) {
+            if (ir.authorities?.[key] !== value) throw new Error(`unexpected Contract IR authority role: ${key}`);
           }
-          if (ir.status !== 'passed' || ir.admissible !== true) {
-            throw new Error('Contract IR is not admissible');
-          }
-          if (ir.admission?.scope?.complete !== true) {
-            throw new Error('Contract IR scope is not complete');
-          }
+          if (report.authorities?.typespec?.authority !== 'independently-authored') throw new Error('TypeSpec is not recorded as an independent authority');
+          if (report.authorities?.jsonSchema?.authority !== 'independently-authored') throw new Error('authored JSON Schema is not recorded as an independent authority');
+          if (report.authorities?.typespec?.generatedJsonSchemaRole !== 'comparison-evidence-only') throw new Error('Schema B is not comparison-only evidence');
+          if (report.authorities?.precedence !== 'none') throw new Error('one authored authority was given precedence');
+          if (report.coverage?.typespecGeneratedJsonSchemaComparison !== true) throw new Error('Schema B versus Schema A comparison did not execute');
+          if (report.coverage?.directDeclarationInventory !== true) throw new Error('direct TypeSpec declaration inventory did not execute');
+          if (report.coverage?.differentialInstanceValidation !== true) throw new Error('differential A/B instance validation did not execute');
+          if (report.status !== 'passed' || report.zeroUnexplainedFindings !== true) throw new Error('parity report is not an unexplained-finding-free pass');
+          if (ir.status !== 'passed' || ir.admissible !== true || ir.admission?.scope?.complete !== true) throw new Error('Contract IR is not a complete admissible artifact');
+          if (generated.$schema !== 'https://json-schema.org/draft/2020-12/schema') throw new Error('generated Schema B is not Draft 2020-12');
           NODE
 
-      - name: Prove source immutability and generated comparison evidence
+      - name: Prove source immutability and distinct generated comparison evidence
         shell: bash
         env:
           TYPESPEC_PATH: ${{ inputs.typespec_path }}
@@ -142,6 +146,7 @@ jobs:
 
       - name: Retain deterministic parity evidence
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: peer-authority-tjsv-${{ github.sha }}
