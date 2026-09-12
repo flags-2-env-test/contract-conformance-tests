@@ -1,0 +1,58 @@
+name: certify ores-cli contract-tree current-main composition
+
+on:
+  pull_request:
+    paths:
+      - 'canaries/ores-cli-contract-tree/current-main-ec6e/**'
+      - '.github/workflows/certify-ores-cli-contract-tree-current-main.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact canary head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          show-progress: false
+          fetch-depth: 1
+      - name: Verify exact head
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Bind exact ORES current-main dispatcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=canaries/ores-cli-contract-tree/current-main-ec6e/src/audit/mod.rs
+          test "$(git hash-object "$file")" = '2c5d890d892eb1734d35aa705c589c0ed97a69e8'
+          grep -Fxq 'mod contract_tree;' "$file"
+          grep -Fxq 'pub use contract_tree::audit_contract_tree;' "$file"
+          grep -Fxq 'mod oauth_provider_contract;' "$file"
+          grep -Fxq 'mod runtime_toml_env_boundary;' "$file"
+          grep -Fxq 'mod tjsv_bidirectional_drift;' "$file"
+          grep -Fxq 'mod tjsv_full_check;' "$file"
+          grep -Fxq 'mod tjsv_generated_schema_provenance;' "$file"
+          grep -Fxq 'mod tjsv_invocation_scope;' "$file"
+          grep -Fxq 'mod tjsv_workflow_revision;' "$file"
+          generated="$(grep -nF 'contract_generated_evidence::augment_contract_generated_evidence_audit(' "$file" | cut -d: -f1)"
+          drift="$(grep -nF 'tjsv_bidirectional_drift::augment_tjsv_bidirectional_drift_audit(' "$file" | cut -d: -f1)"
+          provenance="$(grep -nF 'tjsv_generated_schema_provenance::augment_tjsv_generated_schema_provenance_audit(' "$file" | cut -d: -f1)"
+          full="$(grep -nF 'tjsv_full_check::augment_tjsv_full_check_audit(' "$file" | cut -d: -f1)"
+          scope="$(grep -nF 'tjsv_invocation_scope::augment_tjsv_invocation_scope_audit(' "$file" | cut -d: -f1)"
+          revision="$(grep -nF 'tjsv_workflow_revision::augment_tjsv_workflow_revision_audit(' "$file" | cut -d: -f1)"
+          test "$generated" -lt "$drift"
+          test "$drift" -lt "$provenance"
+          test "$provenance" -lt "$full"
+          test "$full" -lt "$scope"
+          test "$scope" -lt "$revision"
+      - name: Validate workflow syntax
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+        with:
+          args: .github/workflows/certify-ores-cli-contract-tree-current-main.yml
