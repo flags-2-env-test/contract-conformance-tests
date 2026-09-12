@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - 'contracts/peer-authority-canary/**'
+      - 'scripts/check-peer-authority-paths.sh'
       - '.github/workflows/peer-authority-convergence.yml'
       - '.github/workflows/peer-authority-selftest.yml'
   push:
     branches: [main]
     paths:
       - 'contracts/peer-authority-canary/**'
+      - 'scripts/check-peer-authority-paths.sh'
       - '.github/workflows/peer-authority-convergence.yml'
       - '.github/workflows/peer-authority-selftest.yml'
   workflow_dispatch:
@@ -18,6 +20,57 @@ permissions:
   contents: read
 
 jobs:
+  path-negative-controls:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Accept normal authored peer paths
+        run: >-
+          sh scripts/check-peer-authority-paths.sh
+          contracts/peer-authority-canary/main.tsp
+          contracts/peer-authority-canary/authored.schema.json
+
+      - name: Reject generated and evidence paths for both authored peers
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          mkdir -p "$tmp/contracts/generated" "$tmp/contracts/evidence" "$tmp/contracts/authored"
+          cp contracts/peer-authority-canary/main.tsp "$tmp/contracts/generated/main.tsp"
+          cp contracts/peer-authority-canary/main.tsp "$tmp/contracts/authored/main.tsp"
+          cp contracts/peer-authority-canary/authored.schema.json "$tmp/contracts/evidence/authored.schema.json"
+          cp contracts/peer-authority-canary/authored.schema.json "$tmp/contracts/authored/authored.schema.json"
+          cp scripts/check-peer-authority-paths.sh "$tmp/check.sh"
+          (
+            cd "$tmp"
+            if sh check.sh contracts/generated/main.tsp contracts/authored/authored.schema.json; then
+              echo 'generated TypeSpec authority unexpectedly admitted' >&2
+              exit 1
+            fi
+            if sh check.sh contracts/authored/main.tsp contracts/evidence/authored.schema.json; then
+              echo 'evidence JSON Schema authority unexpectedly admitted' >&2
+              exit 1
+            fi
+          )
+
+      - name: Keep generated JSON witnesses distinct from authored authority names
+        shell: bash
+        run: |
+          set -euo pipefail
+          case '.typespec-json-schema-validator/peer-authority/generated/typespec.generated.schema.json' in
+            */authored.schema.json)
+              echo 'generated witness collided with authored authority filename' >&2
+              exit 1
+              ;;
+          esac
+
   peer-authority:
     uses: ./.github/workflows/peer-authority-convergence.yml
     with:
