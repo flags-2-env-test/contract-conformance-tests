@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/flags-2-env-test/contract-conformance-tests/contracts/peer-authority-canary/negative/authored-name-max63.schema.json",
+  "$defs": {
+    "PeerAuthorityCanaryV1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "PeerAuthorityCanaryV1",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": ["version", "name"],
+      "unevaluatedProperties": false
+    }
+  }
+}
