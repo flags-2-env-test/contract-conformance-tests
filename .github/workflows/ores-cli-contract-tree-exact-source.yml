@@ -17,7 +17,7 @@ concurrency:
 jobs:
   certify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - name: Check out exact canary head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,7 +48,7 @@ jobs:
           test "$(git hash-object "$root/product/src/audit/mod.rs")" = '4b35617293ebe020eb9acc419e0c23c50b42688b'
           test "$(git hash-object "$root/product/src/lib.rs")" = '91961aa1613fed7e16bab18f7e8ee7ce72b47b77'
           test "$(git hash-object "$root/product/tjsv/source-lock.json")" = '75c31a252c8fd10bc4159d54f154b10ed1afe21a'
-          test "$(git hash-object "$root/product/.github/workflows/interfaces-contract-tree.yml")" = '358f5425444d09cfa9262da93a3f1b0a7ddcc188'
+          test "$(git hash-object "$root/product/.github/workflows/interfaces-contract-tree.yml")" = '61bd3f47ad2c57723b1d800e2d6b4c82b9ef79c0'
           jq -e '.revision == "93dd73cb246a09b0a1c62d7192cc62ca6ecbe405"' \
             "$root/product/tjsv/source-lock.json"
           grep -Fqx 'mod contract_generated_evidence;' "$root/product/src/audit/mod.rs"
@@ -57,6 +57,8 @@ jobs:
           grep -Fq 'options.profile == "interfaces"' "$root/product/src/lib.rs"
           grep -Fq 'python_systems::audit(&root, report)' "$root/product/src/lib.rs"
           grep -Fq 'audit_contract_tree(&tree_options).await?' "$root/product/src/lib.rs"
+          grep -Fq 'opto-sync-test/contract-conformance-tests' \
+            "$root/product/.github/workflows/interfaces-contract-tree.yml"
 
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
@@ -111,7 +113,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: claritas-viz-test/contract-conformance-tests
-          ref: 79a530a489df5fdd255486915075a1644e01caec
+          ref: 7225c6caac664a26eaa7b2a7056d78a6523e9ad1
           path: test-repos/claritas
           persist-credentials: false
           show-progress: false
@@ -123,6 +125,16 @@ jobs:
           repository: messaging-intel-test/contract-conformance-tests
           ref: 5dce327611648b30c6938007d50601bbdb7d9ff6
           path: test-repos/messaging-intel
+          persist-credentials: false
+          show-progress: false
+          fetch-depth: 1
+
+      - name: Check out Opto Sync fixture
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: opto-sync-test/contract-conformance-tests
+          ref: 212bf5e589bdf63e064f34b2239acdd6f8b8df52
+          path: test-repos/opto-sync
           persist-credentials: false
           show-progress: false
           fetch-depth: 1
@@ -164,6 +176,12 @@ jobs:
           ORES_CLI_TEST_INTERFACE_REPO: ${{ github.workspace }}/test-repos/messaging-intel
         run: cargo +1.95.0 test --locked --test contract_tree_external -- --nocapture
 
+      - name: Execute exact tree audit against Opto Sync test org
+        working-directory: canaries/ores-cli-contract-tree
+        env:
+          ORES_CLI_TEST_INTERFACE_REPO: ${{ github.workspace }}/test-repos/opto-sync
+        run: cargo +1.95.0 test --locked --test contract_tree_external -- --nocapture
+
       - name: Prove all authored fixtures remained immutable
         shell: bash
         run: |
@@ -171,4 +189,5 @@ jobs:
           git -C test-repos/3fa diff --exit-code -- .
           git -C test-repos/claritas diff --exit-code -- .
           git -C test-repos/messaging-intel diff --exit-code -- .
+          git -C test-repos/opto-sync diff --exit-code -- .
           git diff --check
