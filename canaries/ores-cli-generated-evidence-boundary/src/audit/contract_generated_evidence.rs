@@ -13,7 +13,8 @@ const MAX_WALK_DEPTH: usize = 20;
 const MAX_FILES: usize = 4096;
 const AUTHORED_TYPESPEC: &str = "main.tsp";
 const AUTHORED_JSON_SCHEMA: &str = "authored.schema.json";
-const GENERATED_SCHEMA: &str = "generated.schema.json";
+const TJSV_GENERATED_SCHEMA: &str = "typespec.generated.schema.json";
+const LEGACY_GENERATED_SCHEMA: &str = "generated.schema.json";
 const CONTRACT_IR: &str = "contract-ir.json";
 const TJSV_REPORT: &str = "tjsv-report.json";
 const PARITY_REPORT: &str = "parity-report.json";
@@ -139,8 +140,9 @@ pub(super) fn augment_contract_generated_evidence_audit(
 fn is_generated_evidence_name(name: &str) -> bool {
     matches!(
         name,
-        GENERATED_SCHEMA | CONTRACT_IR | TJSV_REPORT | PARITY_REPORT
-    ) || name.ends_with(".sarif")
+        TJSV_GENERATED_SCHEMA | LEGACY_GENERATED_SCHEMA | CONTRACT_IR | TJSV_REPORT | PARITY_REPORT
+    ) || name.ends_with(".generated.schema.json")
+        || name.ends_with(".sarif")
 }
 
 fn has_evidence_directory(path: &Path) -> bool {
@@ -158,7 +160,10 @@ fn should_descend(entry: &DirEntry) -> bool {
         return true;
     }
     let name = entry.file_name().to_string_lossy();
-    !matches!(name.as_ref(), ".git" | "target" | "node_modules" | ".dart_tool")
+    !matches!(
+        name.as_ref(),
+        ".git" | "target" | "node_modules" | ".dart_tool"
+    )
 }
 
 fn relative_display(root: &Path, path: &Path) -> String {
@@ -218,31 +223,70 @@ mod tests {
     }
 
     #[test]
-    fn rejects_generated_schema_b_beside_authored_authorities() {
+    fn rejects_canonical_tjsv_schema_b_beside_authored_authorities() {
+        let report = audit(|root| {
+            write_authorities(root, "contracts/example");
+            fs::write(
+                root.join("contracts/example/typespec.generated.schema.json"),
+                r#"{"$schema":"https://json-schema.org/draft/2020-12/schema"}"#,
+            )
+            .expect("canonical TJSV generated evidence");
+        });
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|finding| { finding.code == "generated-contract-evidence-in-authority-tree" })
+        );
+    }
+
+    #[test]
+    fn rejects_custom_bundle_schema_b_beside_authored_authorities() {
+        let report = audit(|root| {
+            write_authorities(root, "contracts/example");
+            fs::write(
+                root.join("contracts/example/customer-wire.generated.schema.json"),
+                r#"{"$schema":"https://json-schema.org/draft/2020-12/schema"}"#,
+            )
+            .expect("custom bundle generated Schema B");
+        });
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|finding| { finding.code == "generated-contract-evidence-in-authority-tree" })
+        );
+    }
+
+    #[test]
+    fn rejects_legacy_generated_schema_b_beside_authored_authorities() {
         let report = audit(|root| {
             write_authorities(root, "contracts/example");
             fs::write(
                 root.join("contracts/example/generated.schema.json"),
                 r#"{"$schema":"https://json-schema.org/draft/2020-12/schema"}"#,
             )
-            .expect("generated evidence");
+            .expect("legacy generated evidence");
         });
-        assert!(report.findings.iter().any(|finding| {
-            finding.code == "generated-contract-evidence-in-authority-tree"
-        }));
+        assert!(
+            report
+                .findings
+                .iter()
+                .any(|finding| { finding.code == "generated-contract-evidence-in-authority-tree" })
+        );
     }
 
     #[test]
-    fn accepts_generated_schema_b_under_generated_evidence_directory() {
+    fn accepts_canonical_tjsv_schema_b_under_generated_evidence_directory() {
         let report = audit(|root| {
             write_authorities(root, "contracts/example");
             let evidence = root.join("contracts/example/generated");
             fs::create_dir_all(&evidence).expect("generated directory");
             fs::write(
-                evidence.join("generated.schema.json"),
+                evidence.join("typespec.generated.schema.json"),
                 r#"{"$schema":"https://json-schema.org/draft/2020-12/schema"}"#,
             )
-            .expect("generated schema B");
+            .expect("canonical generated schema B");
             fs::write(evidence.join("contract-ir.json"), "{}\n").expect("Contract IR");
             fs::write(evidence.join("report.sarif"), "{}\n").expect("SARIF evidence");
         });
@@ -264,9 +308,11 @@ mod tests {
             )
             .expect("misplaced authored authority");
         });
-        assert!(report.findings.iter().any(|finding| {
-            finding.code == "authored-contract-source-in-generated-evidence"
-        }));
+        assert!(
+            report.findings.iter().any(|finding| {
+                finding.code == "authored-contract-source-in-generated-evidence"
+            })
+        );
     }
 
     #[test]
@@ -280,8 +326,10 @@ mod tests {
             )
             .expect("misplaced TypeSpec authority");
         });
-        assert!(report.findings.iter().any(|finding| {
-            finding.code == "authored-contract-source-in-generated-evidence"
-        }));
+        assert!(
+            report.findings.iter().any(|finding| {
+                finding.code == "authored-contract-source-in-generated-evidence"
+            })
+        );
     }
 }
