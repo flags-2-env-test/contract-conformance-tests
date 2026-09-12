@@ -99,7 +99,10 @@ pub async fn augment_contract_tree(
         let parity_options = ContractAuditOptions {
             typespec: pair.typespec.clone(),
             schema: pair.schema.clone(),
-            report: options.report_root.join(evidence_relative).join("report.json"),
+            report: options
+                .report_root
+                .join(evidence_relative)
+                .join("report.json"),
             validator: options.validator.clone(),
         };
 
@@ -142,23 +145,19 @@ fn discover_peer_authority_pairs(root: &Path) -> Result<Vec<PeerAuthorityPair>, 
         Ok(metadata) => metadata,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => {
-            return Err(
-                Finding::error(
-                    "contract-tree-root-unreadable",
-                    format!("contracts root metadata could not be read: {error}"),
-                )
-                .with_target(CONTRACTS_DIRECTORY),
-            );
+            return Err(Finding::error(
+                "contract-tree-root-unreadable",
+                format!("contracts root metadata could not be read: {error}"),
+            )
+            .with_target(CONTRACTS_DIRECTORY));
         }
     };
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err(
-            Finding::error(
-                "contract-tree-root-invalid",
-                "contracts root must be a real directory, not a symlink or other file type",
-            )
-            .with_target(CONTRACTS_DIRECTORY),
-        );
+        return Err(Finding::error(
+            "contract-tree-root-invalid",
+            "contracts root must be a real directory, not a symlink or other file type",
+        )
+        .with_target(CONTRACTS_DIRECTORY));
     }
 
     let mut candidates = BTreeMap::<PathBuf, CandidateDirectory>::new();
@@ -174,12 +173,10 @@ fn discover_peer_authority_pairs(root: &Path) -> Result<Vec<PeerAuthorityPair>, 
                 "contract-tree-walk-failed",
                 format!("contract tree walk failed: {error}"),
             )
-            .with_target(
-                error.path().map_or_else(
-                    || CONTRACTS_DIRECTORY.to_owned(),
-                    |path| relative_display(root, path),
-                ),
-            )
+            .with_target(error.path().map_or_else(
+                || CONTRACTS_DIRECTORY.to_owned(),
+                |path| relative_display(root, path),
+            ))
         })?;
 
         let Some((home, kind)) = classify_authority_path(&contracts, entry.path()) else {
@@ -187,13 +184,13 @@ fn discover_peer_authority_pairs(root: &Path) -> Result<Vec<PeerAuthorityPair>, 
         };
 
         if candidates.len() >= MAX_CONTRACT_DIRECTORIES && !candidates.contains_key(&home) {
-            return Err(
-                Finding::error(
-                    "contract-tree-limit",
-                    format!("more than {MAX_CONTRACT_DIRECTORIES} contract directories were discovered"),
-                )
-                .with_target(CONTRACTS_DIRECTORY),
-            );
+            return Err(Finding::error(
+                "contract-tree-limit",
+                format!(
+                    "more than {MAX_CONTRACT_DIRECTORIES} contract directories were discovered"
+                ),
+            )
+            .with_target(CONTRACTS_DIRECTORY));
         }
 
         let candidate = candidates.entry(home.clone()).or_default();
@@ -221,33 +218,27 @@ fn discover_peer_authority_pairs(root: &Path) -> Result<Vec<PeerAuthorityPair>, 
         let (typespec, schema) = match (candidate.typespec, candidate.schema) {
             (Some(typespec), Some(schema)) => (typespec, schema),
             (Some(_), None) => {
-                return Err(
-                    Finding::error(
-                        "contract-tree-authored-json-schema-missing",
-                        "TypeSpec authority exists without an independent authored JSON Schema peer",
-                    )
-                    .with_target(relative_display(root, &directory)),
-                );
+                return Err(Finding::error(
+                    "contract-tree-authored-json-schema-missing",
+                    "TypeSpec authority exists without an independent authored JSON Schema peer",
+                )
+                .with_target(relative_display(root, &directory)));
             }
             (None, Some(_)) => {
-                return Err(
-                    Finding::error(
-                        "contract-tree-typespec-missing",
-                        "authored JSON Schema authority exists without an independent TypeSpec peer",
-                    )
-                    .with_target(relative_display(root, &directory)),
-                );
+                return Err(Finding::error(
+                    "contract-tree-typespec-missing",
+                    "authored JSON Schema authority exists without an independent TypeSpec peer",
+                )
+                .with_target(relative_display(root, &directory)));
             }
             (None, None) => continue,
         };
         if !regular_file(&typespec) || !regular_file(&schema) {
-            return Err(
-                Finding::error(
-                    "contract-tree-authority-not-regular",
-                    "TypeSpec and JSON Schema authorities must both be regular non-symlink files",
-                )
-                .with_target(relative_display(root, &directory)),
-            );
+            return Err(Finding::error(
+                "contract-tree-authority-not-regular",
+                "TypeSpec and JSON Schema authorities must both be regular non-symlink files",
+            )
+            .with_target(relative_display(root, &directory)));
         }
         pairs.push(PeerAuthorityPair {
             directory,
@@ -399,12 +390,16 @@ mod tests {
         let pairs = discover_peer_authority_pairs(root.path()).expect("pair discovery");
         assert_eq!(pairs.len(), 1);
         assert!(pairs[0].directory.ends_with("contracts/claritas-viz"));
-        assert!(pairs[0]
-            .typespec
-            .ends_with("contracts/claritas-viz/typespec/main.tsp"));
-        assert!(pairs[0]
-            .schema
-            .ends_with("contracts/claritas-viz/json-schema/contract.schema.json"));
+        assert!(
+            pairs[0]
+                .typespec
+                .ends_with("contracts/claritas-viz/typespec/main.tsp")
+        );
+        assert!(
+            pairs[0]
+                .schema
+                .ends_with("contracts/claritas-viz/json-schema/contract.schema.json")
+        );
     }
 
     #[test]
@@ -414,9 +409,11 @@ mod tests {
         let pairs = discover_peer_authority_pairs(root.path()).expect("pair discovery");
         assert_eq!(pairs.len(), 1);
         assert!(pairs[0].directory.ends_with("contracts/renderer"));
-        assert!(pairs[0]
-            .schema
-            .ends_with("contracts/renderer/json-schema/network.schema.json"));
+        assert!(
+            pairs[0]
+                .schema
+                .ends_with("contracts/renderer/json-schema/network.schema.json")
+        );
     }
 
     #[test]
@@ -429,9 +426,11 @@ mod tests {
         );
         let pairs = discover_peer_authority_pairs(root.path()).expect("pair discovery");
         assert_eq!(pairs.len(), 1);
-        assert!(pairs[0]
-            .schema
-            .ends_with("contracts/participant-metrics/json-schema/authored.schema.json"));
+        assert!(
+            pairs[0]
+                .schema
+                .ends_with("contracts/participant-metrics/json-schema/authored.schema.json")
+        );
     }
 
     #[test]
@@ -479,7 +478,8 @@ mod tests {
         let directory = root.path().join("contracts/half");
         fs::create_dir_all(&directory).expect("contract directory");
         fs::write(directory.join("main.tsp"), "model Half {}\n").expect("TypeSpec");
-        let error = discover_peer_authority_pairs(root.path()).expect_err("one-sided pair must fail");
+        let error =
+            discover_peer_authority_pairs(root.path()).expect_err("one-sided pair must fail");
         assert_eq!(error.code, "contract-tree-authored-json-schema-missing");
     }
 
@@ -489,7 +489,8 @@ mod tests {
         let directory = root.path().join("contracts/claritas-viz/typespec");
         fs::create_dir_all(&directory).expect("contract directory");
         fs::write(directory.join("main.tsp"), "model Half {}\n").expect("TypeSpec");
-        let error = discover_peer_authority_pairs(root.path()).expect_err("one-sided pair must fail");
+        let error =
+            discover_peer_authority_pairs(root.path()).expect_err("one-sided pair must fail");
         assert_eq!(error.code, "contract-tree-authored-json-schema-missing");
     }
 
