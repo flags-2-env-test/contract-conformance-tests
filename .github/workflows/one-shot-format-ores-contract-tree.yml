@@ -1,0 +1,45 @@
+name: one-shot format ores contract tree
+
+on:
+  push:
+    branches:
+      - DEN-390-ores-cli-contract-tree-canary
+    paths:
+      - '.github/workflows/one-shot-format-ores-contract-tree.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact canary branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: DEN-390-ores-cli-contract-tree-canary
+          persist-credentials: true
+      - name: Install exact Rust formatter
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.95.0
+          components: rustfmt
+      - name: Format only exact product copy and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          path=canaries/ores-cli-contract-tree/src/audit/contract_tree.rs
+          before="$(git rev-parse HEAD)"
+          rustfmt +1.95.0 "$path"
+          git diff --exit-code -- . ":!$path" || {
+            echo 'formatter changed an unexpected path' >&2
+            exit 1
+          }
+          test ! -z "$(git diff -- "$path")"
+          git config user.name 'ores-format-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -- "$path"
+          git commit -m 'style: capture Rust 1.95 contract-tree formatting'
+          test "$(git rev-parse HEAD^)" = "$before"
+          git push origin HEAD:DEN-390-ores-cli-contract-tree-canary
