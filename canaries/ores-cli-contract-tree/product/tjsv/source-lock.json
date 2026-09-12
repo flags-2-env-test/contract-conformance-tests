@@ -1,0 +1,5 @@
+{
+  "schema": "ores.tjsv-source-lock/v1",
+  "repository": "ORESoftware/typespec-json-schema-validator",
+  "revision": "93dd73cb246a09b0a1c62d7192cc62ca6ecbe405"
+}

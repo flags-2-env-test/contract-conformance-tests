@@ -1,0 +1,143 @@
+name: Interfaces contract tree
+
+on:
+  pull_request:
+    paths:
+      - "src/audit/contract_tree.rs"
+      - "src/audit/mod.rs"
+      - "src/lib.rs"
+      - "tests/contract_tree_external.rs"
+      - "tjsv/source-lock.json"
+      - ".github/workflows/interfaces-contract-tree.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/audit/contract_tree.rs"
+      - "src/audit/mod.rs"
+      - "src/lib.rs"
+      - "tests/contract_tree_external.rs"
+      - "tjsv/source-lock.json"
+      - ".github/workflows/interfaces-contract-tree.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-tree:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact ores-cli candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          show-progress: false
+          fetch-depth: 1
+
+      - name: Verify exact ores-cli revision
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+
+      - name: Check out exact canonical TJSV
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ORESoftware/typespec-json-schema-validator
+          ref: 93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+          path: .tjsv
+          persist-credentials: false
+          show-progress: false
+          fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.16.0
+          cache: npm
+          cache-dependency-path: .tjsv/package-lock.json
+
+      - name: Install pinned TJSV dependency closure
+        run: npm ci --prefix .tjsv
+
+      - name: Expose exact TJSV executable to ores-cli
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tjsv-bin"
+          cat > "$RUNNER_TEMP/tjsv-bin/tjsv" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec node "$GITHUB_WORKSPACE/.tjsv/bin/typespec-json-schema-validator.mjs" "$@"
+          EOF
+          chmod 0755 "$RUNNER_TEMP/tjsv-bin/tjsv"
+          echo "$RUNNER_TEMP/tjsv-bin" >> "$GITHUB_PATH"
+
+      - name: Check out hardened 3FA contract fixture
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: 3fa-app-test/contract-conformance-tests
+          ref: 0aed088756aba6ef752b3f01b3bfef81e6df2a4d
+          path: test-repos/3fa
+          persist-credentials: false
+          show-progress: false
+          fetch-depth: 1
+
+      - name: Check out hardened Claritas contract fixture
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: claritas-viz-test/contract-conformance-tests
+          ref: 79a530a489df5fdd255486915075a1644e01caec
+          path: test-repos/claritas
+          persist-credentials: false
+          show-progress: false
+          fetch-depth: 1
+
+      - name: Check out immutable Messaging Intel contract fixture
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: messaging-intel-test/contract-conformance-tests
+          ref: 5dce327611648b30c6938007d50601bbdb7d9ff6
+          path: test-repos/messaging-intel
+          persist-credentials: false
+          show-progress: false
+          fetch-depth: 1
+
+      - name: Enforce ores-cli formatting and warnings-as-errors lint
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      - name: Run contract-tree discovery regressions
+        run: cargo test --locked --lib contract_tree --all-features
+
+      - name: Run ores-cli TJSV tree audit against 3FA test org
+        env:
+          ORES_CLI_TEST_INTERFACE_REPO: ${{ github.workspace }}/test-repos/3fa
+        run: cargo test --locked --test contract_tree_external --all-features -- --nocapture
+
+      - name: Run ores-cli TJSV tree audit against Claritas test org
+        env:
+          ORES_CLI_TEST_INTERFACE_REPO: ${{ github.workspace }}/test-repos/claritas
+        run: cargo test --locked --test contract_tree_external --all-features -- --nocapture
+
+      - name: Run ores-cli TJSV tree audit against Messaging Intel test org
+        env:
+          ORES_CLI_TEST_INTERFACE_REPO: ${{ github.workspace }}/test-repos/messaging-intel
+        run: cargo test --locked --test contract_tree_external --all-features -- --nocapture
+
+      - name: Prove test-org authored sources remained immutable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C test-repos/3fa diff --exit-code -- .
+          git -C test-repos/claritas diff --exit-code -- .
+          git -C test-repos/messaging-intel diff --exit-code -- .
