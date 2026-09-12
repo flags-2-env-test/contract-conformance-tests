@@ -81,10 +81,10 @@ jobs:
           persist-credentials: false
           show-progress: false
 
-      - name: Reject one-sided authored JSON Schema drift
+      - name: Reject one-sided authored JSON Schema drift with current TJSV
         id: json_schema_drift
         continue-on-error: true
-        uses: ORESoftware/typespec-json-schema-validator@f848361571af11f0280d309968269cbff8851524
+        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
         with:
           typespec: contracts/peer-authority-canary/main.tsp
           schema: contracts/peer-authority-canary/negative/authored-name-max63.schema.json
@@ -106,15 +106,18 @@ jobs:
           node - <<'NODE'
           const fs = require('node:fs');
           const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/negative-json/report.json', 'utf8'));
-          if (report.status !== 'stopped_for_evaluation') {
-            throw new Error(`expected stopped_for_evaluation, got ${JSON.stringify(report.status)}`);
+          if (report.status === 'passed') {
+            throw new Error(`expected fail-closed JSON Schema drift, got ${JSON.stringify(report.status)}`);
+          }
+          if (!Array.isArray(report.findings) || report.findings.length === 0) {
+            throw new Error('JSON Schema drift rejection emitted no findings');
           }
           NODE
 
-      - name: Reject one-sided TypeSpec drift after transpilation
+      - name: Reject one-sided TypeSpec drift after transpilation with current TJSV
         id: typespec_drift
         continue-on-error: true
-        uses: ORESoftware/typespec-json-schema-validator@f848361571af11f0280d309968269cbff8851524
+        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
         with:
           typespec: contracts/peer-authority-canary/negative/typespec-name-max63.tsp
           schema: contracts/peer-authority-canary/authored.schema.json
@@ -138,8 +141,11 @@ jobs:
           node - <<'NODE'
           const fs = require('node:fs');
           const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/negative-typespec/report.json', 'utf8'));
-          if (report.status !== 'stopped_for_evaluation') {
-            throw new Error(`expected stopped_for_evaluation, got ${JSON.stringify(report.status)}`);
+          if (report.status === 'passed') {
+            throw new Error(`expected fail-closed TypeSpec drift, got ${JSON.stringify(report.status)}`);
+          }
+          if (!Array.isArray(report.findings) || report.findings.length === 0) {
+            throw new Error('TypeSpec drift rejection emitted no findings');
           }
           NODE
 
@@ -149,3 +155,4 @@ jobs:
       typespec_path: contracts/peer-authority-canary/main.tsp
       schema_path: contracts/peer-authority-canary/authored.schema.json
       instances_path: contracts/peer-authority-canary/instances
+      expected_declarations_json: '["OresPeerCanary.PeerAuthorityCanaryV1"]'
