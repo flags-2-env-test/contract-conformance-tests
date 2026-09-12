@@ -44,7 +44,7 @@ jobs:
           sha256sum "$TYPESPEC_PATH" "$SCHEMA_PATH" > "$RUNNER_TEMP/peer-authority/authorities.before.sha256"
 
       - name: Compile TypeSpec to comparison JSON and compare both peer authorities
-        uses: ORESoftware/typespec-json-schema-validator@4a5d049218adc2740d4cf78f612caf7f38f6f64c
+        uses: ORESoftware/typespec-json-schema-validator@f848361571af11f0280d309968269cbff8851524
         with:
           typespec: ${{ inputs.typespec_path }}
           schema: ${{ inputs.schema_path }}
@@ -53,6 +53,30 @@ jobs:
           contract_ir: .typespec-json-schema-validator/peer-authority/contract-ir.json
           output_dir: .typespec-json-schema-validator/peer-authority/generated
           quiet: 'false'
+
+      - name: Prove independent authority roles in admitted Contract IR
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = '.typespec-json-schema-validator/peer-authority/contract-ir.json';
+          const ir = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const expected = {
+            typespec: 'independently-authored',
+            jsonSchema: 'independently-authored',
+            generatedJsonSchema: 'comparison-evidence-only',
+            precedence: 'none',
+          };
+          for (const [key, value] of Object.entries(expected)) {
+            if (ir.authorities?.[key] !== value) {
+              throw new Error(`unexpected Contract IR authority role: ${key}`);
+            }
+          }
+          if (ir.status !== 'passed' || ir.admissible !== true) {
+            throw new Error('Contract IR is not admissible');
+          }
+          NODE
 
       - name: Prove source immutability and generated comparison evidence
         shell: bash
