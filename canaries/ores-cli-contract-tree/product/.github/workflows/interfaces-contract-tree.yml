@@ -26,7 +26,7 @@ permissions:
 jobs:
   contract-tree:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Check out exact ores-cli candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -94,7 +94,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: claritas-viz-test/contract-conformance-tests
-          ref: 79a530a489df5fdd255486915075a1644e01caec
+          ref: 7225c6caac664a26eaa7b2a7056d78a6523e9ad1
           path: test-repos/claritas
           persist-credentials: false
           show-progress: false
@@ -106,6 +106,16 @@ jobs:
           repository: messaging-intel-test/contract-conformance-tests
           ref: 5dce327611648b30c6938007d50601bbdb7d9ff6
           path: test-repos/messaging-intel
+          persist-credentials: false
+          show-progress: false
+          fetch-depth: 1
+
+      - name: Check out immutable Opto Sync contract fixture
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: opto-sync-test/contract-conformance-tests
+          ref: 212bf5e589bdf63e064f34b2239acdd6f8b8df52
+          path: test-repos/opto-sync
           persist-credentials: false
           show-progress: false
           fetch-depth: 1
@@ -134,6 +144,11 @@ jobs:
           ORES_CLI_TEST_INTERFACE_REPO: ${{ github.workspace }}/test-repos/messaging-intel
         run: cargo test --locked --test contract_tree_external --all-features -- --nocapture
 
+      - name: Run ores-cli TJSV tree audit against Opto Sync test org
+        env:
+          ORES_CLI_TEST_INTERFACE_REPO: ${{ github.workspace }}/test-repos/opto-sync
+        run: cargo test --locked --test contract_tree_external --all-features -- --nocapture
+
       - name: Prove test-org authored sources remained immutable
         shell: bash
         run: |
@@ -141,3 +156,4 @@ jobs:
           git -C test-repos/3fa diff --exit-code -- .
           git -C test-repos/claritas diff --exit-code -- .
           git -C test-repos/messaging-intel diff --exit-code -- .
+          git -C test-repos/opto-sync diff --exit-code -- .
