@@ -35,7 +35,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           root='canaries/ores-cli-generated-evidence-boundary'
-          test "$(git hash-object "$root/src/audit/contract_generated_evidence.rs")" = '35bccf979615f64aee88c4ffe204c0140038adb8'
+          test "$(git hash-object "$root/src/audit/contract_generated_evidence.rs")" = '0533c0995ced15765d2d63da1a418b0164256644'
           test "$(git hash-object "$root/product-audit-mod.rs")" = '7f83f651d8e2d7694ac8a020d279ad047ab595fc'
           grep -Fqx 'mod contract_generated_evidence;' "$root/product-audit-mod.rs"
           grep -Fq 'contract_generated_evidence::augment_contract_generated_evidence_audit(' "$root/product-audit-mod.rs"
