@@ -42,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           root=canaries/ores-cli-contract-tree
-          test "$(git hash-object "$root/src/audit/contract_tree.rs")" = '8dfd451d1d0b19656f549a6ffb0e036a8f39265a'
+          test "$(git hash-object "$root/src/audit/contract_tree.rs")" = '93a8a62e801aef14b3c3f55ac6fc9ca1abb7d3d5'
           test "$(git hash-object "$root/src/model.rs")" = 'fbaeb6bab206db0275f62ecf3076e48da1a3c756'
           test "$(git hash-object "$root/tests/contract_tree_external.rs")" = '66c3e70e8043a2c43f6aaad6370508ead643c1d7'
           test "$(git hash-object "$root/product/src/audit/mod.rs")" = '4b35617293ebe020eb9acc419e0c23c50b42688b'
