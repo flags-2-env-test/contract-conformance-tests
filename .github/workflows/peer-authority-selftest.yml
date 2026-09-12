@@ -71,6 +71,107 @@ jobs:
               ;;
           esac
 
+  one-sided-peer-drift:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install Node 22.16.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.16.0'
+
+      - name: Check out exact TJSV source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ORESoftware/typespec-json-schema-validator
+          ref: f848361571af11f0280d309968269cbff8851524
+          path: .deps/tjsv
+          persist-credentials: false
+          show-progress: false
+
+      - name: Install the validator lockfile graph
+        working-directory: .deps/tjsv
+        run: npm ci --omit=dev
+
+      - name: Reject TypeSpec-only semantic drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          tsp='contracts/peer-authority-canary/main.tsp'
+          schema='contracts/peer-authority-canary/authored.schema.json'
+          instances='contracts/peer-authority-canary/instances'
+          cp "$tsp" "$RUNNER_TEMP/main.tsp.original"
+          trap 'cp "$RUNNER_TEMP/main.tsp.original" "$tsp"' EXIT
+          perl -0pi -e 's/\@maxLength\(64\)/\@maxLength(63)/' "$tsp"
+          grep -F '@maxLength(63)' "$tsp"
+          set +e
+          (
+            cd .deps/tjsv
+            node bin/typespec-json-schema-validator.mjs check \
+              --typespec="$GITHUB_WORKSPACE/$tsp" \
+              --schema="$GITHUB_WORKSPACE/$schema" \
+              --instances="$GITHUB_WORKSPACE/$instances" \
+              --report="$RUNNER_TEMP/typespec-drift-report.json" \
+              --output-dir="$RUNNER_TEMP/typespec-drift-generated" \
+              --quiet
+          )
+          code=$?
+          set -e
+          test "$code" -eq 2 || {
+            echo "expected TypeSpec-only drift to stop for evaluation with exit 2; got $code" >&2
+            exit 1
+          }
+          node -e 'const fs=require("node:fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(r.status!=="stopped_for_evaluation" || !(r.findings?.length>0)) process.exit(1)' "$RUNNER_TEMP/typespec-drift-report.json"
+          cp "$RUNNER_TEMP/main.tsp.original" "$tsp"
+          trap - EXIT
+
+      - name: Reject authored-JSON-only semantic drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          tsp='contracts/peer-authority-canary/main.tsp'
+          schema='contracts/peer-authority-canary/authored.schema.json'
+          instances='contracts/peer-authority-canary/instances'
+          cp "$schema" "$RUNNER_TEMP/authored.schema.json.original"
+          trap 'cp "$RUNNER_TEMP/authored.schema.json.original" "$schema"' EXIT
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = 'contracts/peer-authority-canary/authored.schema.json';
+          const schema = JSON.parse(fs.readFileSync(path, 'utf8'));
+          schema.$defs.PeerAuthorityCanaryV1.properties.name.maxLength = 63;
+          fs.writeFileSync(path, `${JSON.stringify(schema, null, 2)}\n`);
+          NODE
+          grep -F '"maxLength": 63' "$schema"
+          set +e
+          (
+            cd .deps/tjsv
+            node bin/typespec-json-schema-validator.mjs check \
+              --typespec="$GITHUB_WORKSPACE/$tsp" \
+              --schema="$GITHUB_WORKSPACE/$schema" \
+              --instances="$GITHUB_WORKSPACE/$instances" \
+              --report="$RUNNER_TEMP/json-drift-report.json" \
+              --output-dir="$RUNNER_TEMP/json-drift-generated" \
+              --quiet
+          )
+          code=$?
+          set -e
+          test "$code" -eq 2 || {
+            echo "expected authored-JSON-only drift to stop for evaluation with exit 2; got $code" >&2
+            exit 1
+          }
+          node -e 'const fs=require("node:fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(r.status!=="stopped_for_evaluation" || !(r.findings?.length>0)) process.exit(1)' "$RUNNER_TEMP/json-drift-report.json"
+          cp "$RUNNER_TEMP/authored.schema.json.original" "$schema"
+          trap - EXIT
+
+      - name: Prove tracked authorities were restored byte-for-byte
+        run: git diff --exit-code -- contracts/peer-authority-canary/main.tsp contracts/peer-authority-canary/authored.schema.json
+
   peer-authority:
     uses: ./.github/workflows/peer-authority-convergence.yml
     with:
