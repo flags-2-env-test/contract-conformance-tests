@@ -31,7 +31,7 @@ jobs:
           set -euo pipefail
           path=canaries/ores-cli-contract-tree/src/audit/contract_tree.rs
           before="$(git rev-parse HEAD)"
-          rustfmt +1.95.0 "$path"
+          rustfmt +1.95.0 --edition 2024 "$path"
           git diff --exit-code -- . ":!$path" || {
             echo 'formatter changed an unexpected path' >&2
             exit 1
