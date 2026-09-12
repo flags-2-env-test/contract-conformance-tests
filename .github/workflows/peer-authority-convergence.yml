@@ -15,6 +15,10 @@ on:
         description: Repository-relative TJSV positive/negative instance corpus.
         required: true
         type: string
+      expected_declarations_json:
+        description: Exact JSON array of qualified declarations admitted for this canary.
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -35,6 +39,7 @@ jobs:
         env:
           TYPESPEC_PATH: ${{ inputs.typespec_path }}
           SCHEMA_PATH: ${{ inputs.schema_path }}
+          EXPECTED_DECLARATIONS: ${{ inputs.expected_declarations_json }}
         run: |
           set -euo pipefail
           safe_relative_authority() {
@@ -58,6 +63,7 @@ jobs:
           safe_relative_authority "$SCHEMA_PATH"
           case "$TYPESPEC_PATH" in *.tsp) ;; *) exit 6 ;; esac
           case "$SCHEMA_PATH" in *.json) ;; *) exit 6 ;; esac
+          node -e 'const value=JSON.parse(process.argv[1]); if (!Array.isArray(value)||value.length===0||value.some((x)=>typeof x!=="string"||!x.includes("."))||new Set(value).size!==value.length) process.exit(7)' "$EXPECTED_DECLARATIONS"
 
       - name: Bind independently authored authority bytes
         shell: bash
@@ -70,15 +76,26 @@ jobs:
           sha256sum "$TYPESPEC_PATH" "$SCHEMA_PATH" > "$RUNNER_TEMP/peer-authority/authorities.before.sha256"
 
       - name: Compile TypeSpec to comparison JSON and compare both peer authorities
-        uses: ORESoftware/typespec-json-schema-validator@f848361571af11f0280d309968269cbff8851524
+        uses: ORESoftware/typespec-json-schema-validator@c745036456dd80408b83217118b8563edb8f6abd
         with:
           typespec: ${{ inputs.typespec_path }}
           schema: ${{ inputs.schema_path }}
           instances: ${{ inputs.instances_path }}
           report: .typespec-json-schema-validator/peer-authority/report.json
+          sarif: .typespec-json-schema-validator/peer-authority/report.sarif
           contract_ir: .typespec-json-schema-validator/peer-authority/contract-ir.json
           output_dir: .typespec-json-schema-validator/peer-authority/generated
           quiet: 'false'
+
+      - name: Verify current authored inputs, generated Schema B, receipt, IR, and exact scope
+        uses: ORESoftware/typespec-json-schema-validator/actions/verify-contract-ir@c745036456dd80408b83217118b8563edb8f6abd
+        with:
+          contract_ir: .typespec-json-schema-validator/peer-authority/contract-ir.json
+          report: .typespec-json-schema-validator/peer-authority/report.json
+          typespec: ${{ inputs.typespec_path }}
+          schema: ${{ inputs.schema_path }}
+          generated_schema: .typespec-json-schema-validator/peer-authority/generated/typespec.generated.schema.json
+          expected_declarations: ${{ inputs.expected_declarations_json }}
 
       - name: Prove independent authority roles in admitted Contract IR
         shell: bash
@@ -102,6 +119,9 @@ jobs:
           if (ir.status !== 'passed' || ir.admissible !== true) {
             throw new Error('Contract IR is not admissible');
           }
+          if (ir.admission?.scope?.complete !== true) {
+            throw new Error('Contract IR scope is not complete');
+          }
           NODE
 
       - name: Prove source immutability and generated comparison evidence
@@ -114,18 +134,18 @@ jobs:
           sha256sum "$TYPESPEC_PATH" "$SCHEMA_PATH" > "$RUNNER_TEMP/peer-authority/authorities.after.sha256"
           cmp "$RUNNER_TEMP/peer-authority/authorities.before.sha256" "$RUNNER_TEMP/peer-authority/authorities.after.sha256"
           test -s .typespec-json-schema-validator/peer-authority/report.json
+          test -s .typespec-json-schema-validator/peer-authority/report.sarif
           test -s .typespec-json-schema-validator/peer-authority/contract-ir.json
-          generated="$(find .typespec-json-schema-validator/peer-authority/generated -type f -name '*.json' -size +0c -print -quit)"
-          test -n "$generated"
-          test "$generated" != "$SCHEMA_PATH"
+          test -s .typespec-json-schema-validator/peer-authority/generated/typespec.generated.schema.json
+          test '.typespec-json-schema-validator/peer-authority/generated/typespec.generated.schema.json' != "$SCHEMA_PATH"
+          git diff --exit-code -- "$TYPESPEC_PATH" "$SCHEMA_PATH"
 
       - name: Retain deterministic parity evidence
         if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: peer-authority-tjsv-${{ github.sha }}
           path: .typespec-json-schema-validator/peer-authority/
-          if-no-files-found: warn
+          if-no-files-found: error
           include-hidden-files: true
           retention-days: 90
