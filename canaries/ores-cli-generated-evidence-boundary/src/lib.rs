@@ -83,7 +83,9 @@ pub mod model {
 }
 
 pub mod audit {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
+
+    use crate::model::CommandReport;
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct RepositoryAuditOptions {
@@ -93,4 +95,16 @@ pub mod audit {
     }
 
     mod contract_generated_evidence;
+
+    #[must_use]
+    pub fn run_generated_evidence_boundary(path: &Path) -> CommandReport {
+        contract_generated_evidence::augment_contract_generated_evidence_audit(
+            &RepositoryAuditOptions {
+                path: path.to_path_buf(),
+                profile: "baseline".to_owned(),
+                additional_required_paths: Vec::new(),
+            },
+            CommandReport::new("audit repo"),
+        )
+    }
 }
