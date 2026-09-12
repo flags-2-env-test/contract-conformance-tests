@@ -1,0 +1,26 @@
+name: Peer authority TJSV self-test
+
+on:
+  pull_request:
+    paths:
+      - 'contracts/peer-authority-canary/**'
+      - '.github/workflows/peer-authority-convergence.yml'
+      - '.github/workflows/peer-authority-selftest.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'contracts/peer-authority-canary/**'
+      - '.github/workflows/peer-authority-convergence.yml'
+      - '.github/workflows/peer-authority-selftest.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  peer-authority:
+    uses: ./.github/workflows/peer-authority-convergence.yml
+    with:
+      typespec_path: contracts/peer-authority-canary/main.tsp
+      schema_path: contracts/peer-authority-canary/authored.schema.json
+      instances_path: contracts/peer-authority-canary/instances
