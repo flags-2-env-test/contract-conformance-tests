@@ -1,0 +1,81 @@
+name: Peer authority TJSV convergence
+
+on:
+  workflow_call:
+    inputs:
+      typespec_path:
+        description: Repository-relative independent TypeSpec authority.
+        required: true
+        type: string
+      schema_path:
+        description: Repository-relative independently authored Draft 2020-12 JSON Schema authority.
+        required: true
+        type: string
+      instances_path:
+        description: Repository-relative TJSV positive/negative instance corpus.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  convergence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact caller candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Bind independently authored authority bytes
+        shell: bash
+        env:
+          TYPESPEC_PATH: ${{ inputs.typespec_path }}
+          SCHEMA_PATH: ${{ inputs.schema_path }}
+        run: |
+          set -euo pipefail
+          test -f "$TYPESPEC_PATH"
+          test -f "$SCHEMA_PATH"
+          test "$TYPESPEC_PATH" != "$SCHEMA_PATH"
+          mkdir -p "$RUNNER_TEMP/peer-authority"
+          sha256sum "$TYPESPEC_PATH" "$SCHEMA_PATH" > "$RUNNER_TEMP/peer-authority/authorities.before.sha256"
+
+      - name: Compile TypeSpec to comparison JSON and compare both peer authorities
+        uses: ORESoftware/typespec-json-schema-validator@4a5d049218adc2740d4cf78f612caf7f38f6f64c
+        with:
+          typespec: ${{ inputs.typespec_path }}
+          schema: ${{ inputs.schema_path }}
+          instances: ${{ inputs.instances_path }}
+          report: .typespec-json-schema-validator/peer-authority/report.json
+          contract_ir: .typespec-json-schema-validator/peer-authority/contract-ir.json
+          output_dir: .typespec-json-schema-validator/peer-authority/generated
+          quiet: 'false'
+
+      - name: Prove source immutability and generated comparison evidence
+        shell: bash
+        env:
+          TYPESPEC_PATH: ${{ inputs.typespec_path }}
+          SCHEMA_PATH: ${{ inputs.schema_path }}
+        run: |
+          set -euo pipefail
+          sha256sum "$TYPESPEC_PATH" "$SCHEMA_PATH" > "$RUNNER_TEMP/peer-authority/authorities.after.sha256"
+          cmp "$RUNNER_TEMP/peer-authority/authorities.before.sha256" "$RUNNER_TEMP/peer-authority/authorities.after.sha256"
+          test -s .typespec-json-schema-validator/peer-authority/report.json
+          test -s .typespec-json-schema-validator/peer-authority/contract-ir.json
+          generated="$(find .typespec-json-schema-validator/peer-authority/generated -type f -name '*.json' -size +0c -print -quit)"
+          test -n "$generated"
+          test "$generated" != "$SCHEMA_PATH"
+
+      - name: Retain deterministic parity evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: peer-authority-tjsv-${{ github.sha }}
+          path: .typespec-json-schema-validator/peer-authority/
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 90
