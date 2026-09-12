@@ -51,7 +51,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ORESoftware/typespec-json-schema-validator
-          ref: 93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+          ref: 07688e1eea92a666f7e8647038c9f2c1544440ed
           path: .tjsv
           persist-credentials: false
           show-progress: false
@@ -114,7 +114,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: opto-sync-test/contract-conformance-tests
-          ref: 212bf5e589bdf63e064f34b2239acdd6f8b8df52
+          ref: 9febec9b2d10c178b25f5aca8f8e7c8b3b70094c
           path: test-repos/opto-sync
           persist-credentials: false
           show-progress: false
