@@ -71,6 +71,78 @@ jobs:
               ;;
           esac
 
+  semantic-negative-controls:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Reject one-sided authored JSON Schema drift
+        id: json_schema_drift
+        continue-on-error: true
+        uses: ORESoftware/typespec-json-schema-validator@f848361571af11f0280d309968269cbff8851524
+        with:
+          typespec: contracts/peer-authority-canary/main.tsp
+          schema: contracts/peer-authority-canary/negative/authored-name-max63.schema.json
+          instances: contracts/peer-authority-canary/instances
+          report: .typespec-json-schema-validator/negative-json/report.json
+          contract_ir: .typespec-json-schema-validator/negative-json/contract-ir.json
+          output_dir: .typespec-json-schema-validator/negative-json/generated
+          quiet: 'false'
+
+      - name: Require authored JSON Schema drift to fail closed
+        if: always()
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.json_schema_drift.outcome }}
+        run: |
+          set -euo pipefail
+          test "$OUTCOME" = failure
+          test -s .typespec-json-schema-validator/negative-json/report.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/negative-json/report.json', 'utf8'));
+          if (report.status !== 'stopped_for_evaluation') {
+            throw new Error(`expected stopped_for_evaluation, got ${JSON.stringify(report.status)}`);
+          }
+          NODE
+
+      - name: Reject one-sided TypeSpec drift after transpilation
+        id: typespec_drift
+        continue-on-error: true
+        uses: ORESoftware/typespec-json-schema-validator@f848361571af11f0280d309968269cbff8851524
+        with:
+          typespec: contracts/peer-authority-canary/negative/typespec-name-max63.tsp
+          schema: contracts/peer-authority-canary/authored.schema.json
+          instances: contracts/peer-authority-canary/instances
+          report: .typespec-json-schema-validator/negative-typespec/report.json
+          contract_ir: .typespec-json-schema-validator/negative-typespec/contract-ir.json
+          output_dir: .typespec-json-schema-validator/negative-typespec/generated
+          quiet: 'false'
+
+      - name: Require TypeSpec drift to fail closed
+        if: always()
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.typespec_drift.outcome }}
+        run: |
+          set -euo pipefail
+          test "$OUTCOME" = failure
+          test -s .typespec-json-schema-validator/negative-typespec/report.json
+          generated="$(find .typespec-json-schema-validator/negative-typespec/generated -type f -name '*.json' -size +0c -print -quit)"
+          test -n "$generated"
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/negative-typespec/report.json', 'utf8'));
+          if (report.status !== 'stopped_for_evaluation') {
+            throw new Error(`expected stopped_for_evaluation, got ${JSON.stringify(report.status)}`);
+          }
+          NODE
+
   peer-authority:
     uses: ./.github/workflows/peer-authority-convergence.yml
     with:
