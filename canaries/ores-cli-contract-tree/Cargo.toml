@@ -1,0 +1,19 @@
+[package]
+name = "ores-cli-contract-tree-canary"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "ores_cli"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "=1.0.219", features = ["derive"] }
+serde_json = "=1.0.140"
+thiserror = "=2.0.12"
+tokio = { version = "=1.44.2", features = ["macros", "process", "rt-multi-thread"] }
+walkdir = "=2.5.0"
+
+[dev-dependencies]
+tempfile = "=3.19.1"
