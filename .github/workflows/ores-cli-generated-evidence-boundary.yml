@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out exact review head
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
@@ -43,20 +43,20 @@ jobs:
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
-          toolchain: '1.90.0'
+          toolchain: '1.95.0'
           components: rustfmt, clippy
 
       - name: Format exact module and canary harness
-        run: cargo +1.90.0 fmt --manifest-path canaries/ores-cli-generated-evidence-boundary/Cargo.toml --all -- --check
+        run: cargo +1.95.0 fmt --manifest-path canaries/ores-cli-generated-evidence-boundary/Cargo.toml --all -- --check
 
       - name: Compile canary harness
-        run: cargo +1.90.0 check --manifest-path canaries/ores-cli-generated-evidence-boundary/Cargo.toml --all-targets
+        run: cargo +1.95.0 check --manifest-path canaries/ores-cli-generated-evidence-boundary/Cargo.toml --all-targets
 
       - name: Run exact embedded product regressions
-        run: cargo +1.90.0 test --manifest-path canaries/ores-cli-generated-evidence-boundary/Cargo.toml --all-targets
+        run: cargo +1.95.0 test --manifest-path canaries/ores-cli-generated-evidence-boundary/Cargo.toml --all-targets
 
       - name: Deny warnings under Clippy
-        run: cargo +1.90.0 clippy --manifest-path canaries/ores-cli-generated-evidence-boundary/Cargo.toml --all-targets -- -D warnings
+        run: cargo +1.95.0 clippy --manifest-path canaries/ores-cli-generated-evidence-boundary/Cargo.toml --all-targets -- -D warnings
 
       - name: Repeat regressions optimized
-        run: cargo +1.90.0 test --release --manifest-path canaries/ores-cli-generated-evidence-boundary/Cargo.toml --all-targets
+        run: cargo +1.95.0 test --release --manifest-path canaries/ores-cli-generated-evidence-boundary/Cargo.toml --all-targets
