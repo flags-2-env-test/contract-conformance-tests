@@ -84,7 +84,7 @@ jobs:
       - name: Reject one-sided authored JSON Schema drift
         id: json_schema_drift
         continue-on-error: true
-        uses: ORESoftware/typespec-json-schema-validator@f848361571af11f0280d309968269cbff8851524
+        uses: ORESoftware/typespec-json-schema-validator@c745036456dd80408b83217118b8563edb8f6abd
         with:
           typespec: contracts/peer-authority-canary/main.tsp
           schema: contracts/peer-authority-canary/negative/authored-name-max63.schema.json
@@ -114,7 +114,7 @@ jobs:
       - name: Reject one-sided TypeSpec drift after transpilation
         id: typespec_drift
         continue-on-error: true
-        uses: ORESoftware/typespec-json-schema-validator@f848361571af11f0280d309968269cbff8851524
+        uses: ORESoftware/typespec-json-schema-validator@c745036456dd80408b83217118b8563edb8f6abd
         with:
           typespec: contracts/peer-authority-canary/negative/typespec-name-max63.tsp
           schema: contracts/peer-authority-canary/authored.schema.json
@@ -133,8 +133,7 @@ jobs:
           set -euo pipefail
           test "$OUTCOME" = failure
           test -s .typespec-json-schema-validator/negative-typespec/report.json
-          generated="$(find .typespec-json-schema-validator/negative-typespec/generated -type f -name '*.json' -size +0c -print -quit)"
-          test -n "$generated"
+          test -s .typespec-json-schema-validator/negative-typespec/generated/typespec.generated.schema.json
           node - <<'NODE'
           const fs = require('node:fs');
           const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/negative-typespec/report.json', 'utf8'));
@@ -143,9 +142,14 @@ jobs:
           }
           NODE
 
+      - name: Prove negative controls never mutate authored authorities
+        shell: bash
+        run: git diff --exit-code -- contracts/peer-authority-canary/
+
   peer-authority:
     uses: ./.github/workflows/peer-authority-convergence.yml
     with:
       typespec_path: contracts/peer-authority-canary/main.tsp
       schema_path: contracts/peer-authority-canary/authored.schema.json
       instances_path: contracts/peer-authority-canary/instances
+      expected_declarations_json: '["OresPeerCanary.PeerAuthorityCanaryV1"]'
