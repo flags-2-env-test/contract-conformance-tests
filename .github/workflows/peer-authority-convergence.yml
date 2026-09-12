@@ -22,7 +22,7 @@ permissions:
 jobs:
   convergence:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Check out exact caller candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -165,7 +165,74 @@ jobs:
           }
           NODE
 
+      - name: Create temporary one-authority drift witness
+        shell: bash
+        env:
+          SCHEMA_PATH: ${{ inputs.schema_path }}
+        run: |
+          set -euo pipefail
+          mkdir -p target/tjsv-negative-control
+          cp "$SCHEMA_PATH" target/tjsv-negative-control/authored.schema.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = 'target/tjsv-negative-control/authored.schema.json';
+          const schema = JSON.parse(fs.readFileSync(path, 'utf8'));
+          let mutated = false;
+          const visit = (node) => {
+            if (mutated || !node || typeof node !== 'object' || Array.isArray(node)) return;
+            if (node.type === 'object' && node.properties && typeof node.properties === 'object' && !Array.isArray(node.properties)) {
+              const marker = '__tjsvNegativeControl';
+              if (Object.prototype.hasOwnProperty.call(node.properties, marker)) {
+                throw new Error('negative-control marker already exists in authored schema');
+              }
+              node.properties[marker] = { type: 'string', const: 'drift-must-fail' };
+              const required = Array.isArray(node.required) ? [...node.required] : [];
+              if (!required.includes(marker)) required.push(marker);
+              node.required = required;
+              mutated = true;
+              return;
+            }
+            for (const value of Object.values(node)) visit(value);
+          };
+          visit(schema);
+          if (!mutated) throw new Error('no object schema with properties was available for the drift canary');
+          fs.writeFileSync(path, `${JSON.stringify(schema, null, 2)}\n`);
+          NODE
+
+      - name: Require one-authority JSON Schema drift to fail closed
+        id: negative_schema_drift
+        continue-on-error: true
+        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        with:
+          typespec: ${{ inputs.typespec_path }}
+          schema: target/tjsv-negative-control/authored.schema.json
+          instances: ${{ inputs.instances_path }}
+          report: .typespec-json-schema-validator/peer-authority/negative/report.json
+          contract_ir: .typespec-json-schema-validator/peer-authority/negative/contract-ir.json
+          output_dir: .typespec-json-schema-validator/peer-authority/negative/generated
+          quiet: 'false'
+
+      - name: Prove drift canary was rejected with non-admissible evidence
+        if: always()
+        shell: bash
+        env:
+          NEGATIVE_OUTCOME: ${{ steps.negative_schema_drift.outcome }}
+        run: |
+          set -euo pipefail
+          test "$NEGATIVE_OUTCOME" = failure
+          test -s .typespec-json-schema-validator/peer-authority/negative/report.json
+          test -s .typespec-json-schema-validator/peer-authority/negative/contract-ir.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/peer-authority/negative/report.json', 'utf8'));
+          const ir = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/peer-authority/negative/contract-ir.json', 'utf8'));
+          if (report.status === 'passed') throw new Error('TJSV incorrectly admitted one-authority drift');
+          if (!Array.isArray(report.findings) || report.findings.length === 0) throw new Error('drift rejection emitted no findings');
+          if (ir.status === 'passed' || ir.admissible === true) throw new Error('drift Contract IR remained admissible');
+          NODE
+
       - name: Prove source immutability and generated comparison evidence
+        if: always()
         shell: bash
         env:
           TYPESPEC_PATH: ${{ inputs.typespec_path }}
@@ -180,7 +247,7 @@ jobs:
           test -n "$generated"
           test "$generated" != "$SCHEMA_PATH"
 
-      - name: Retain deterministic parity evidence
+      - name: Retain deterministic parity and drift-rejection evidence
         if: always()
         continue-on-error: true
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
