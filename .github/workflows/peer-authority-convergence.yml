@@ -35,7 +35,29 @@ jobs:
         env:
           TYPESPEC_PATH: ${{ inputs.typespec_path }}
           SCHEMA_PATH: ${{ inputs.schema_path }}
-        run: sh scripts/check-peer-authority-paths.sh "$TYPESPEC_PATH" "$SCHEMA_PATH"
+        run: |
+          set -euo pipefail
+          safe_relative_authority() {
+            local path="$1"
+            case "$path" in
+              /*|../*|*/../*|*/..|..) return 1 ;;
+            esac
+            IFS='/' read -r -a components <<< "$path"
+            for component in "${components[@]}"; do
+              case "$component" in
+                generated|evidence|.canary-evidence|.typespec-json-schema-validator|target|dist|build|artifacts)
+                  return 1
+                  ;;
+              esac
+            done
+          }
+          test -f "$TYPESPEC_PATH"
+          test -f "$SCHEMA_PATH"
+          test "$TYPESPEC_PATH" != "$SCHEMA_PATH"
+          safe_relative_authority "$TYPESPEC_PATH"
+          safe_relative_authority "$SCHEMA_PATH"
+          case "$TYPESPEC_PATH" in *.tsp) ;; *) exit 6 ;; esac
+          case "$SCHEMA_PATH" in *.json) ;; *) exit 6 ;; esac
 
       - name: Bind independently authored authority bytes
         shell: bash
