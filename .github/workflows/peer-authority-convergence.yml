@@ -70,7 +70,7 @@ jobs:
           sha256sum "$TYPESPEC_PATH" "$SCHEMA_PATH" > "$RUNNER_TEMP/peer-authority/authorities.before.sha256"
 
       - name: Compile TypeSpec to comparison JSON and compare both peer authorities
-        uses: ORESoftware/typespec-json-schema-validator@f848361571af11f0280d309968269cbff8851524
+        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
         with:
           typespec: ${{ inputs.typespec_path }}
           schema: ${{ inputs.schema_path }}
@@ -80,27 +80,88 @@ jobs:
           output_dir: .typespec-json-schema-validator/peer-authority/generated
           quiet: 'false'
 
-      - name: Prove independent authority roles in admitted Contract IR
+      - name: Prove Schema B comparison and dual-authority admission
         shell: bash
+        env:
+          TYPESPEC_PATH: ${{ inputs.typespec_path }}
+          SCHEMA_PATH: ${{ inputs.schema_path }}
         run: |
           set -euo pipefail
           node - <<'NODE'
           const fs = require('node:fs');
-          const path = '.typespec-json-schema-validator/peer-authority/contract-ir.json';
-          const ir = JSON.parse(fs.readFileSync(path, 'utf8'));
-          const expected = {
+          const reportPath = '.typespec-json-schema-validator/peer-authority/report.json';
+          const irPath = '.typespec-json-schema-validator/peer-authority/contract-ir.json';
+          const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+          const ir = JSON.parse(fs.readFileSync(irPath, 'utf8'));
+
+          const fail = (message) => { throw new Error(message); };
+          if (report.schema !== 'ores.typespec-json-schema-validator.report/v1') {
+            fail('unexpected parity report schema');
+          }
+          if (report.status !== 'passed' || report.zeroUnexplainedFindings !== true) {
+            fail('peer-authority parity did not pass cleanly');
+          }
+          if (report.authorities?.typespec?.authority !== 'independently-authored') {
+            fail('TypeSpec is not recorded as an independently authored authority');
+          }
+          if (report.authorities?.jsonSchema?.authority !== 'independently-authored') {
+            fail('JSON Schema is not recorded as an independently authored authority');
+          }
+          if (report.authorities?.jsonSchema?.dialect !== 'https://json-schema.org/draft/2020-12/schema') {
+            fail('authored JSON Schema is not Draft 2020-12');
+          }
+          if (report.authorities?.typespec?.generatedJsonSchemaRole !== 'comparison-evidence-only') {
+            fail('TypeSpec-generated JSON Schema is not comparison-only evidence');
+          }
+          if (report.authorities?.precedence !== 'none') {
+            fail('one authored authority incorrectly has precedence');
+          }
+
+          for (const key of [
+            'directDeclarationInventory',
+            'typespecGeneratedJsonSchemaComparison',
+            'differentialInstanceValidation',
+            'sourceMutationCheck',
+          ]) {
+            if (report.coverage?.[key] !== true) fail(`required TJSV coverage missing: ${key}`);
+          }
+
+          const inputs = report.inputs ?? {};
+          for (const key of ['typespec', 'authoredJsonSchema', 'generatedJsonSchema']) {
+            if (!inputs[key]?.input || !inputs[key]?.digest) fail(`missing bound report input: ${key}`);
+          }
+          if (inputs.typespec.input !== process.env.TYPESPEC_PATH) {
+            fail('report TypeSpec input is not the caller-authored authority');
+          }
+          if (inputs.authoredJsonSchema.input !== process.env.SCHEMA_PATH) {
+            fail('report JSON Schema input is not the caller-authored authority');
+          }
+          if (inputs.generatedJsonSchema.input === inputs.authoredJsonSchema.input) {
+            fail('generated Schema B collided with authored JSON Schema A');
+          }
+          if (!inputs.generatedJsonSchema.input.includes('.typespec-json-schema-validator/peer-authority/generated/')) {
+            fail('generated Schema B escaped the comparison-evidence output lane');
+          }
+
+          const differential = report.differential?.summary;
+          if (!differential || !Number.isInteger(differential.probesEvaluated) || differential.probesEvaluated <= 0) {
+            fail('no differential probes were evaluated against both schema lanes');
+          }
+          if (differential.divergences !== 0 || differential.refusals !== 0) {
+            fail('generated and authored JSON Schema lanes disagree on differential probes');
+          }
+
+          const expectedIrAuthorities = {
             typespec: 'independently-authored',
             jsonSchema: 'independently-authored',
             generatedJsonSchema: 'comparison-evidence-only',
             precedence: 'none',
           };
-          for (const [key, value] of Object.entries(expected)) {
-            if (ir.authorities?.[key] !== value) {
-              throw new Error(`unexpected Contract IR authority role: ${key}`);
-            }
+          for (const [key, value] of Object.entries(expectedIrAuthorities)) {
+            if (ir.authorities?.[key] !== value) fail(`unexpected Contract IR authority role: ${key}`);
           }
           if (ir.status !== 'passed' || ir.admissible !== true) {
-            throw new Error('Contract IR is not admissible');
+            fail('Contract IR is not admissible');
           }
           NODE
 
