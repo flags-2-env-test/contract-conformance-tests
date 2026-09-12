@@ -94,7 +94,7 @@ jobs:
           output_dir: .typespec-json-schema-validator/negative-json/generated
           quiet: 'false'
 
-      - name: Require authored JSON Schema drift to fail closed
+      - name: Require authored JSON Schema drift to fail closed with retained Schema B
         if: always()
         shell: bash
         env:
@@ -103,15 +103,15 @@ jobs:
           set -euo pipefail
           test "$OUTCOME" = failure
           test -s .typespec-json-schema-validator/negative-json/report.json
+          test -s .typespec-json-schema-validator/negative-json/contract-ir.json
+          test -s .typespec-json-schema-validator/negative-json/generated/typespec.generated.schema.json
           node - <<'NODE'
           const fs = require('node:fs');
           const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/negative-json/report.json', 'utf8'));
-          if (report.status === 'passed') {
-            throw new Error(`expected fail-closed JSON Schema drift, got ${JSON.stringify(report.status)}`);
-          }
-          if (!Array.isArray(report.findings) || report.findings.length === 0) {
-            throw new Error('JSON Schema drift rejection emitted no findings');
-          }
+          const ir = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/negative-json/contract-ir.json', 'utf8'));
+          if (report.status === 'passed') throw new Error(`expected fail-closed JSON Schema drift, got ${JSON.stringify(report.status)}`);
+          if (!Array.isArray(report.findings) || report.findings.length === 0) throw new Error('JSON Schema drift rejection emitted no findings');
+          if (ir.status === 'passed' || ir.admissible === true) throw new Error('JSON Schema drift Contract IR remained admissible');
           NODE
 
       - name: Reject one-sided TypeSpec drift after transpilation with current TJSV
@@ -127,7 +127,7 @@ jobs:
           output_dir: .typespec-json-schema-validator/negative-typespec/generated
           quiet: 'false'
 
-      - name: Require TypeSpec drift to fail closed
+      - name: Require TypeSpec drift to fail closed with retained Schema B
         if: always()
         shell: bash
         env:
@@ -136,18 +136,21 @@ jobs:
           set -euo pipefail
           test "$OUTCOME" = failure
           test -s .typespec-json-schema-validator/negative-typespec/report.json
-          generated="$(find .typespec-json-schema-validator/negative-typespec/generated -type f -name '*.json' -size +0c -print -quit)"
-          test -n "$generated"
+          test -s .typespec-json-schema-validator/negative-typespec/contract-ir.json
+          test -s .typespec-json-schema-validator/negative-typespec/generated/typespec.generated.schema.json
           node - <<'NODE'
           const fs = require('node:fs');
           const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/negative-typespec/report.json', 'utf8'));
-          if (report.status === 'passed') {
-            throw new Error(`expected fail-closed TypeSpec drift, got ${JSON.stringify(report.status)}`);
-          }
-          if (!Array.isArray(report.findings) || report.findings.length === 0) {
-            throw new Error('TypeSpec drift rejection emitted no findings');
-          }
+          const ir = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/negative-typespec/contract-ir.json', 'utf8'));
+          if (report.status === 'passed') throw new Error(`expected fail-closed TypeSpec drift, got ${JSON.stringify(report.status)}`);
+          if (!Array.isArray(report.findings) || report.findings.length === 0) throw new Error('TypeSpec drift rejection emitted no findings');
+          if (ir.status === 'passed' || ir.admissible === true) throw new Error('TypeSpec drift Contract IR remained admissible');
           NODE
+
+      - name: Prove negative controls never mutate authored authorities
+        if: always()
+        shell: bash
+        run: git diff --exit-code -- contracts/peer-authority-canary/
 
   peer-authority:
     uses: ./.github/workflows/peer-authority-convergence.yml
