@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "name": "this-name-is-deliberately-longer-than-sixty-four-characters-to-prove-both-peer-authorities-reject-it",
+  "enabled": true
+}
