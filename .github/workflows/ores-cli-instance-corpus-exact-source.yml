@@ -3,6 +3,7 @@ name: ores-cli instance-corpus exact-source certification
 on:
   pull_request:
     paths:
+      - 'canaries/ores-cli-instance-corpus/**'
       - '.github/workflows/ores-cli-instance-corpus-exact-source.yml'
   workflow_dispatch:
 
@@ -16,7 +17,7 @@ concurrency:
 jobs:
   certify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - name: Check out exact certification head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -25,33 +26,22 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Verify certification identity
+      - name: Verify exact certification and product blob identities
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          root=canaries/ores-cli-instance-corpus
+          test "$(git hash-object "$root/src/audit/contract_instance_corpus.rs")" = '66ded46759f5404c379d5fea16d3ee2ac0eb65e5'
+          grep -Fq 'struct RepositoryAuditOptions' "$root/src/audit/mod.rs"
+          grep -Fq 'pub struct CommandReport' "$root/src/model.rs"
 
       - name: Validate workflow syntax
         uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
         with:
           args: .github/workflows/ores-cli-instance-corpus-exact-source.yml
-
-      - name: Check out exact ores-cli candidate
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: ORESoftware/ores-cli
-          ref: 565c4dfd3dfa85cfc197f5629f1894ecd4b97b1d
-          path: product
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Bind exact product source
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git -C product rev-parse HEAD)" = '565c4dfd3dfa85cfc197f5629f1894ecd4b97b1d'
-          test "$(git -C product hash-object src/audit/contract_instance_corpus.rs)" = '66ded46759f5404c379d5fea16d3ee2ac0eb65e5'
-          grep -Fq 'mod contract_instance_corpus;' product/src/audit/mod.rs
-          grep -Fq 'augment_contract_instance_corpus_audit' product/src/audit/mod.rs
 
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
@@ -59,23 +49,29 @@ jobs:
           toolchain: '1.95.0'
           components: rustfmt, clippy
 
-      - name: Check focused formatting
-        run: rustfmt +1.95.0 --check product/src/audit/contract_instance_corpus.rs
+      - name: Generate a run-local dependency lock
+        working-directory: canaries/ores-cli-instance-corpus
+        run: cargo +1.95.0 generate-lockfile
 
-      - name: Compile and run instance-corpus regressions
+      - name: Prove exact product source is rustfmt-clean
+        run: rustfmt +1.95.0 --check canaries/ores-cli-instance-corpus/src/audit/contract_instance_corpus.rs
+
+      - name: Compile and execute positive and adversarial corpus regressions
+        working-directory: canaries/ores-cli-instance-corpus
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/ores-cli-instance-corpus-target
-        run: |
-          set -euo pipefail
-          cargo +1.95.0 test --manifest-path product/Cargo.toml --locked --lib contract_instance_corpus -- --nocapture
+        run: cargo +1.95.0 test --locked --all-targets -- --nocapture
 
-      - name: Deny warnings in the product library
+      - name: Deny warnings in the exact-source canary
+        working-directory: canaries/ores-cli-instance-corpus
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/ores-cli-instance-corpus-target
-        run: cargo +1.95.0 clippy --manifest-path product/Cargo.toml --locked --lib --all-features -- -D warnings
+        run: cargo +1.95.0 clippy --locked --all-targets -- -D warnings
 
-      - name: Prove authored product source remained immutable
+      - name: Prove canary sources remained immutable
+        shell: bash
         run: |
           set -euo pipefail
-          git -C product diff --exit-code -- .
+          test "$(git hash-object canaries/ores-cli-instance-corpus/src/audit/contract_instance_corpus.rs)" = '66ded46759f5404c379d5fea16d3ee2ac0eb65e5'
+          git diff --exit-code -- canaries/ores-cli-instance-corpus/src
           git diff --check
