@@ -51,7 +51,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ORESoftware/typespec-json-schema-validator
-          ref: 07688e1eea92a666f7e8647038c9f2c1544440ed
+          ref: c5392b03a405bb5296d1de09ac785b3b097529cd
           path: .tjsv
           persist-credentials: false
           show-progress: false
@@ -84,7 +84,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: 3fa-app-test/contract-conformance-tests
-          ref: 0aed088756aba6ef752b3f01b3bfef81e6df2a4d
+          ref: 37e697afe6d73a3db4a70b12ba3ff6451e175233
           path: test-repos/3fa
           persist-credentials: false
           show-progress: false
@@ -94,7 +94,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: claritas-viz-test/contract-conformance-tests
-          ref: 7225c6caac664a26eaa7b2a7056d78a6523e9ad1
+          ref: 8a0966bd60470aee89a3bd351ffc1ae51891e10c
           path: test-repos/claritas
           persist-credentials: false
           show-progress: false
@@ -104,7 +104,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: messaging-intel-test/contract-conformance-tests
-          ref: 5dce327611648b30c6938007d50601bbdb7d9ff6
+          ref: 57cf041a545f43f0a534423eef52ca4d6d7e7361
           path: test-repos/messaging-intel
           persist-credentials: false
           show-progress: false
@@ -114,7 +114,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: opto-sync-test/contract-conformance-tests
-          ref: 9febec9b2d10c178b25f5aca8f8e7c8b3b70094c
+          ref: 365b186f3e951b23139f136b44c8ef75f67ced77
           path: test-repos/opto-sync
           persist-credentials: false
           show-progress: false
