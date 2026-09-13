@@ -32,35 +32,47 @@ jobs:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
-      - name: Validate workflow syntax
+      - name: Validate certificate workflow syntax
         uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
         with:
           args: .github/workflows/ores-cli-contract-tree-exact-source.yml
 
-      - name: Prove exact ores-cli product slice
+      - name: Validate mirrored ores-cli workflow syntax
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+        with:
+          args: canaries/ores-cli-contract-tree/product/.github/workflows/interfaces-contract-tree.yml
+
+      - name: Prove exact ores-cli product slice and certified pins
         shell: bash
         run: |
           set -euo pipefail
           root=canaries/ores-cli-contract-tree
+          workflow="$root/product/.github/workflows/interfaces-contract-tree.yml"
+          lock="$root/product/tjsv/source-lock.json"
           test "$(git hash-object "$root/src/audit/contract_tree.rs")" = '93a8a62e801aef14b3c3f55ac6fc9ca1abb7d3d5'
           test "$(git hash-object "$root/src/model.rs")" = 'fbaeb6bab206db0275f62ecf3076e48da1a3c756'
           test "$(git hash-object "$root/tests/contract_tree_external.rs")" = '66c3e70e8043a2c43f6aaad6370508ead643c1d7'
           test "$(git hash-object "$root/product/src/audit/mod.rs")" = '4b35617293ebe020eb9acc419e0c23c50b42688b'
           test "$(git hash-object "$root/product/src/lib.rs")" = '91961aa1613fed7e16bab18f7e8ee7ce72b47b77'
-          test "$(git hash-object "$root/product/tjsv/source-lock.json")" = '126bf1560a80de55acbb3edd66aaad159fbeb32a'
-          test "$(git hash-object "$root/product/.github/workflows/interfaces-contract-tree.yml")" = '8731533dd65377bf9685fc9002fd78cbbf612cf0'
-          jq -e '.revision == "07688e1eea92a666f7e8647038c9f2c1544440ed"' \
-            "$root/product/tjsv/source-lock.json"
+          # These are the exact Git blob ids on ORESoftware/ores-cli#292 head 58e0543f.
+          test "$(git hash-object "$lock")" = '812eeff36efca3bf70b3e046cadd8a5541b08c45'
+          test "$(git hash-object "$workflow")" = '09ebb2ab1a60dd189762c2fb0c4bd09a3e57fcae'
+          jq -e '.revision == "c5392b03a405bb5296d1de09ac785b3b097529cd"' "$lock"
           grep -Fqx 'mod contract_generated_evidence;' "$root/product/src/audit/mod.rs"
           grep -Fqx 'mod contract_tree;' "$root/product/src/audit/mod.rs"
           grep -Fqx 'pub use contract_tree::audit_contract_tree;' "$root/product/src/audit/mod.rs"
           grep -Fq 'options.profile == "interfaces"' "$root/product/src/lib.rs"
           grep -Fq 'python_systems::audit(&root, report)' "$root/product/src/lib.rs"
           grep -Fq 'audit_contract_tree(&tree_options).await?' "$root/product/src/lib.rs"
-          grep -Fq 'opto-sync-test/contract-conformance-tests' \
-            "$root/product/.github/workflows/interfaces-contract-tree.yml"
-          grep -Fq '9febec9b2d10c178b25f5aca8f8e7c8b3b70094c' \
-            "$root/product/.github/workflows/interfaces-contract-tree.yml"
+          for pin in \
+            c5392b03a405bb5296d1de09ac785b3b097529cd \
+            37e697afe6d73a3db4a70b12ba3ff6451e175233 \
+            8a0966bd60470aee89a3bd351ffc1ae51891e10c \
+            57cf041a545f43f0a534423eef52ca4d6d7e7361 \
+            365b186f3e951b23139f136b44c8ef75f67ced77; do
+            grep -Fq "$pin" "$workflow"
+          done
+          ! grep -Fq '07688e1eea92a666f7e8647038c9f2c1544440ed' "$workflow"
 
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
@@ -72,11 +84,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ORESoftware/typespec-json-schema-validator
-          ref: 07688e1eea92a666f7e8647038c9f2c1544440ed
+          ref: c5392b03a405bb5296d1de09ac785b3b097529cd
           path: .tjsv
           persist-credentials: false
           show-progress: false
           fetch-depth: 1
+
+      - name: Verify exact TJSV revision
+        run: test "$(git -C .tjsv rev-parse HEAD)" = 'c5392b03a405bb5296d1de09ac785b3b097529cd'
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -101,45 +116,54 @@ jobs:
           chmod 0755 "$RUNNER_TEMP/tjsv-bin/tjsv"
           echo "$RUNNER_TEMP/tjsv-bin" >> "$GITHUB_PATH"
 
-      - name: Check out hardened 3FA fixture
+      - name: Check out certified 3FA fixture
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: 3fa-app-test/contract-conformance-tests
-          ref: 0aed088756aba6ef752b3f01b3bfef81e6df2a4d
+          ref: 37e697afe6d73a3db4a70b12ba3ff6451e175233
           path: test-repos/3fa
           persist-credentials: false
           show-progress: false
           fetch-depth: 1
 
-      - name: Check out hardened Claritas fixture
+      - name: Check out certified Claritas fixture
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: claritas-viz-test/contract-conformance-tests
-          ref: 7225c6caac664a26eaa7b2a7056d78a6523e9ad1
+          ref: 8a0966bd60470aee89a3bd351ffc1ae51891e10c
           path: test-repos/claritas
           persist-credentials: false
           show-progress: false
           fetch-depth: 1
 
-      - name: Check out Messaging Intel fixture
+      - name: Check out certified Messaging Intel fixture
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: messaging-intel-test/contract-conformance-tests
-          ref: 5dce327611648b30c6938007d50601bbdb7d9ff6
+          ref: 57cf041a545f43f0a534423eef52ca4d6d7e7361
           path: test-repos/messaging-intel
           persist-credentials: false
           show-progress: false
           fetch-depth: 1
 
-      - name: Check out Opto Sync fixture
+      - name: Check out certified Opto Sync fixture
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: opto-sync-test/contract-conformance-tests
-          ref: 9febec9b2d10c178b25f5aca8f8e7c8b3b70094c
+          ref: 365b186f3e951b23139f136b44c8ef75f67ced77
           path: test-repos/opto-sync
           persist-credentials: false
           show-progress: false
           fetch-depth: 1
+
+      - name: Verify exact fixture revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C test-repos/3fa rev-parse HEAD)" = '37e697afe6d73a3db4a70b12ba3ff6451e175233'
+          test "$(git -C test-repos/claritas rev-parse HEAD)" = '8a0966bd60470aee89a3bd351ffc1ae51891e10c'
+          test "$(git -C test-repos/messaging-intel rev-parse HEAD)" = '57cf041a545f43f0a534423eef52ca4d6d7e7361'
+          test "$(git -C test-repos/opto-sync rev-parse HEAD)" = '365b186f3e951b23139f136b44c8ef75f67ced77'
 
       - name: Generate harness lockfile from exact pins
         working-directory: canaries/ores-cli-contract-tree
