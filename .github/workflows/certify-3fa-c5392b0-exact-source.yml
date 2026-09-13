@@ -1,0 +1,165 @@
+name: Certify 3FA TJSV c539 exact source
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/certify-3fa-c5392b0-exact-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify-3fa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out certificate source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          show-progress: false
+
+      - name: Check out exact 3FA candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: 3fa-app-test/contract-conformance-tests
+          ref: 625d6dcb5b3d1ea36abb9e312167be76d6f5c798
+          path: subject
+          persist-credentials: false
+          show-progress: false
+          fetch-depth: 1
+
+      - name: Verify exact 3FA revision and certification pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C subject rev-parse HEAD)" = '625d6dcb5b3d1ea36abb9e312167be76d6f5c798'
+          grep -Fq 'flags-2-env-test/contract-conformance-tests/.github/workflows/peer-authority-convergence.yml@9de426fe8f7a2711f5b79439e545e9bb1561ac08' subject/.github/workflows/peer-authority-convergence.yml
+          count=$(grep -Fc 'ORESoftware/typespec-json-schema-validator@c5392b03a405bb5296d1de09ac785b3b097529cd' subject/.github/workflows/peer-authority-negative-controls.yml)
+          test "$count" -eq 2
+
+      - name: Bind authored 3FA authority bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            subject/contracts/auth-factor-policy/main.tsp \
+            subject/contracts/auth-factor-policy/authored.schema.json \
+            > "$RUNNER_TEMP/3fa-authorities.before.sha256"
+
+      - name: Positive 3FA peer-authority parity
+        uses: ORESoftware/typespec-json-schema-validator@c5392b03a405bb5296d1de09ac785b3b097529cd
+        with:
+          typespec: subject/contracts/auth-factor-policy/main.tsp
+          schema: subject/contracts/auth-factor-policy/authored.schema.json
+          instances: subject/contracts/auth-factor-policy/instances
+          report: .typespec-json-schema-validator/3fa-pass/report.json
+          contract_ir: .typespec-json-schema-validator/3fa-pass/contract-ir.json
+          output_dir: .typespec-json-schema-validator/3fa-pass/generated
+          quiet: 'false'
+
+      - name: Verify current 3FA inputs and declaration scope
+        uses: ORESoftware/typespec-json-schema-validator/actions/test-consumer-admission@c5392b03a405bb5296d1de09ac785b3b097529cd
+        with:
+          contract_ir: .typespec-json-schema-validator/3fa-pass/contract-ir.json
+          report: .typespec-json-schema-validator/3fa-pass/report.json
+          typespec: subject/contracts/auth-factor-policy/main.tsp
+          schema: subject/contracts/auth-factor-policy/authored.schema.json
+          generated_schema: .typespec-json-schema-validator/3fa-pass/generated/typespec.generated.schema.json
+          expected_declarations: '["ThreeFaAuthFactorPolicy.AuthFactorPolicyV1"]'
+          verification: .typespec-json-schema-validator/3fa-pass/verification.json
+
+      - name: Prepare TypeSpec-only drift witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/3fa-typespec-drift"
+          sed 's/@maxLength(80)/@maxLength(79)/' \
+            subject/contracts/auth-factor-policy/main.tsp \
+            > "$RUNNER_TEMP/3fa-typespec-drift/main.tsp"
+          grep -Fq '@maxLength(79)' "$RUNNER_TEMP/3fa-typespec-drift/main.tsp"
+
+      - name: TypeSpec-only 3FA drift must fail closed
+        id: typespec_drift
+        continue-on-error: true
+        uses: ORESoftware/typespec-json-schema-validator@c5392b03a405bb5296d1de09ac785b3b097529cd
+        with:
+          typespec: ${{ runner.temp }}/3fa-typespec-drift/main.tsp
+          schema: subject/contracts/auth-factor-policy/authored.schema.json
+          instances: subject/contracts/auth-factor-policy/instances
+          report: .typespec-json-schema-validator/3fa-typespec-drift/report.json
+          contract_ir: .typespec-json-schema-validator/3fa-typespec-drift/contract-ir.json
+          output_dir: .typespec-json-schema-validator/3fa-typespec-drift/generated
+          quiet: 'false'
+
+      - name: Assert TypeSpec-only 3FA drift rejection
+        if: always()
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.typespec_drift.outcome }}
+        run: |
+          set -euo pipefail
+          test "$OUTCOME" = failure
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/3fa-typespec-drift/report.json', 'utf8'));
+          if (report.status !== 'stopped_for_evaluation') throw new Error(`unexpected TypeSpec drift status: ${report.status}`);
+          if (!Array.isArray(report.findings) || report.findings.length === 0) throw new Error('TypeSpec drift emitted no findings');
+          NODE
+
+      - name: Prepare JSON-Schema-only drift witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/3fa-json-drift"
+          cp subject/contracts/auth-factor-policy/authored.schema.json "$RUNNER_TEMP/3fa-json-drift/authored.schema.json"
+          node - "$RUNNER_TEMP/3fa-json-drift/authored.schema.json" <<'NODE'
+          const fs = require('node:fs');
+          const path = process.argv[2];
+          const schema = JSON.parse(fs.readFileSync(path, 'utf8'));
+          schema.$defs.AuthFactorPolicyV1.properties.label.maxLength = 79;
+          fs.writeFileSync(path, `${JSON.stringify(schema, null, 2)}\n`);
+          NODE
+
+      - name: JSON-Schema-only 3FA drift must fail closed
+        id: json_schema_drift
+        continue-on-error: true
+        uses: ORESoftware/typespec-json-schema-validator@c5392b03a405bb5296d1de09ac785b3b097529cd
+        with:
+          typespec: subject/contracts/auth-factor-policy/main.tsp
+          schema: ${{ runner.temp }}/3fa-json-drift/authored.schema.json
+          instances: subject/contracts/auth-factor-policy/instances
+          report: .typespec-json-schema-validator/3fa-json-drift/report.json
+          contract_ir: .typespec-json-schema-validator/3fa-json-drift/contract-ir.json
+          output_dir: .typespec-json-schema-validator/3fa-json-drift/generated
+          quiet: 'false'
+
+      - name: Assert JSON-Schema-only 3FA drift rejection
+        if: always()
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.json_schema_drift.outcome }}
+        run: |
+          set -euo pipefail
+          test "$OUTCOME" = failure
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/3fa-json-drift/report.json', 'utf8'));
+          if (report.status !== 'stopped_for_evaluation') throw new Error(`unexpected JSON Schema drift status: ${report.status}`);
+          if (!Array.isArray(report.findings) || report.findings.length === 0) throw new Error('JSON Schema drift emitted no findings');
+          NODE
+
+      - name: Prove exact 3FA authored sources remained byte-identical
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum \
+            subject/contracts/auth-factor-policy/main.tsp \
+            subject/contracts/auth-factor-policy/authored.schema.json \
+            > "$RUNNER_TEMP/3fa-authorities.after.sha256"
+          cmp "$RUNNER_TEMP/3fa-authorities.before.sha256" "$RUNNER_TEMP/3fa-authorities.after.sha256"
+          git -C subject diff --exit-code -- \
+            contracts/auth-factor-policy/main.tsp \
+            contracts/auth-factor-policy/authored.schema.json
