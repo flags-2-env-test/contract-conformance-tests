@@ -76,7 +76,7 @@ jobs:
           sha256sum "$TYPESPEC_PATH" "$SCHEMA_PATH" > "$RUNNER_TEMP/peer-authority/authorities.before.sha256"
 
       - name: Compile TypeSpec to comparison Schema B and compare peer authorities
-        uses: ORESoftware/typespec-json-schema-validator@a952c53b4628b1d12e21ed51879d910a8c19a581
+        uses: ORESoftware/typespec-json-schema-validator@c5392b03a405bb5296d1de09ac785b3b097529cd
         with:
           typespec: ${{ inputs.typespec_path }}
           schema: ${{ inputs.schema_path }}
@@ -88,7 +88,7 @@ jobs:
           quiet: 'false'
 
       - name: Verify current inputs, generated Schema B, receipt, IR, and exact declaration scope
-        uses: ORESoftware/typespec-json-schema-validator/actions/verify-contract-ir@a952c53b4628b1d12e21ed51879d910a8c19a581
+        uses: ORESoftware/typespec-json-schema-validator/actions/verify-contract-ir@c5392b03a405bb5296d1de09ac785b3b097529cd
         with:
           contract_ir: .typespec-json-schema-validator/peer-authority/contract-ir.json
           report: .typespec-json-schema-validator/peer-authority/report.json
@@ -178,7 +178,7 @@ jobs:
       - name: Require one-authority JSON Schema drift to fail closed
         id: negative_schema_drift
         continue-on-error: true
-        uses: ORESoftware/typespec-json-schema-validator@a952c53b4628b1d12e21ed51879d910a8c19a581
+        uses: ORESoftware/typespec-json-schema-validator@c5392b03a405bb5296d1de09ac785b3b097529cd
         with:
           typespec: ${{ inputs.typespec_path }}
           schema: target/tjsv-negative-control/authored.schema.json
@@ -188,7 +188,7 @@ jobs:
           output_dir: .typespec-json-schema-validator/peer-authority/negative/generated
           quiet: 'false'
 
-      - name: Prove drift canary was rejected with non-admissible evidence
+      - name: Prove JSON Schema drift was rejected with non-admissible evidence
         if: always()
         shell: bash
         env:
@@ -202,9 +202,56 @@ jobs:
           const fs = require('node:fs');
           const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/peer-authority/negative/report.json', 'utf8'));
           const ir = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/peer-authority/negative/contract-ir.json', 'utf8'));
-          if (report.status === 'passed') throw new Error('TJSV incorrectly admitted one-authority drift');
-          if (!Array.isArray(report.findings) || report.findings.length === 0) throw new Error('drift rejection emitted no findings');
-          if (ir.status === 'passed' || ir.admissible === true) throw new Error('drift Contract IR remained admissible');
+          if (report.status === 'passed') throw new Error('TJSV incorrectly admitted JSON-Schema-only drift');
+          if (!Array.isArray(report.findings) || report.findings.length === 0) throw new Error('JSON Schema drift rejection emitted no findings');
+          if (ir.status === 'passed' || ir.admissible === true) throw new Error('JSON Schema drift Contract IR remained admissible');
+          NODE
+
+      - name: Create temporary TypeSpec-only drift witness
+        shell: bash
+        env:
+          TYPESPEC_PATH: ${{ inputs.typespec_path }}
+        run: |
+          set -euo pipefail
+          mkdir -p target/tjsv-negative-control
+          cp "$TYPESPEC_PATH" target/tjsv-negative-control/main.tsp
+          cat >> target/tjsv-negative-control/main.tsp <<'TSP'
+
+          model __TjsvNegativeControl {
+            drift: "must-fail";
+          }
+          TSP
+
+      - name: Require one-authority TypeSpec drift to fail closed
+        id: negative_typespec_drift
+        continue-on-error: true
+        uses: ORESoftware/typespec-json-schema-validator@c5392b03a405bb5296d1de09ac785b3b097529cd
+        with:
+          typespec: target/tjsv-negative-control/main.tsp
+          schema: ${{ inputs.schema_path }}
+          instances: ${{ inputs.instances_path }}
+          report: .typespec-json-schema-validator/peer-authority/negative-typespec/report.json
+          contract_ir: .typespec-json-schema-validator/peer-authority/negative-typespec/contract-ir.json
+          output_dir: .typespec-json-schema-validator/peer-authority/negative-typespec/generated
+          quiet: 'false'
+
+      - name: Prove TypeSpec drift was rejected with non-admissible evidence
+        if: always()
+        shell: bash
+        env:
+          NEGATIVE_OUTCOME: ${{ steps.negative_typespec_drift.outcome }}
+        run: |
+          set -euo pipefail
+          test "$NEGATIVE_OUTCOME" = failure
+          test -s .typespec-json-schema-validator/peer-authority/negative-typespec/report.json
+          test -s .typespec-json-schema-validator/peer-authority/negative-typespec/contract-ir.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/peer-authority/negative-typespec/report.json', 'utf8'));
+          const ir = JSON.parse(fs.readFileSync('.typespec-json-schema-validator/peer-authority/negative-typespec/contract-ir.json', 'utf8'));
+          if (report.status === 'passed') throw new Error('TJSV incorrectly admitted TypeSpec-only drift');
+          if (!Array.isArray(report.findings) || report.findings.length === 0) throw new Error('TypeSpec drift rejection emitted no findings');
+          if (ir.status === 'passed' || ir.admissible === true) throw new Error('TypeSpec drift Contract IR remained admissible');
           NODE
 
       - name: Prove source immutability and generated comparison evidence

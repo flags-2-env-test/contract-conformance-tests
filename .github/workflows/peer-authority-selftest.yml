@@ -84,7 +84,7 @@ jobs:
       - name: Reject one-sided authored JSON Schema drift with current TJSV
         id: json_schema_drift
         continue-on-error: true
-        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        uses: ORESoftware/typespec-json-schema-validator@c5392b03a405bb5296d1de09ac785b3b097529cd
         with:
           typespec: contracts/peer-authority-canary/main.tsp
           schema: contracts/peer-authority-canary/negative/authored-name-max63.schema.json
@@ -117,7 +117,7 @@ jobs:
       - name: Reject one-sided TypeSpec drift after transpilation with current TJSV
         id: typespec_drift
         continue-on-error: true
-        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        uses: ORESoftware/typespec-json-schema-validator@c5392b03a405bb5296d1de09ac785b3b097529cd
         with:
           typespec: contracts/peer-authority-canary/negative/typespec-name-max63.tsp
           schema: contracts/peer-authority-canary/authored.schema.json
