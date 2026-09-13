@@ -1,0 +1,13 @@
+[package]
+name = "ores-cli-instance-corpus-canary"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.145"
+walkdir = "=2.5.0"
+
+[dev-dependencies]
+tempfile = "=3.23.0"
