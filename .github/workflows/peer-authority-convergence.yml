@@ -76,7 +76,7 @@ jobs:
           sha256sum "$TYPESPEC_PATH" "$SCHEMA_PATH" > "$RUNNER_TEMP/peer-authority/authorities.before.sha256"
 
       - name: Compile TypeSpec to comparison Schema B and compare peer authorities
-        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        uses: ORESoftware/typespec-json-schema-validator@a952c53b4628b1d12e21ed51879d910a8c19a581
         with:
           typespec: ${{ inputs.typespec_path }}
           schema: ${{ inputs.schema_path }}
@@ -88,7 +88,7 @@ jobs:
           quiet: 'false'
 
       - name: Verify current inputs, generated Schema B, receipt, IR, and exact declaration scope
-        uses: ORESoftware/typespec-json-schema-validator/actions/verify-contract-ir@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        uses: ORESoftware/typespec-json-schema-validator/actions/verify-contract-ir@a952c53b4628b1d12e21ed51879d910a8c19a581
         with:
           contract_ir: .typespec-json-schema-validator/peer-authority/contract-ir.json
           report: .typespec-json-schema-validator/peer-authority/report.json
@@ -178,7 +178,7 @@ jobs:
       - name: Require one-authority JSON Schema drift to fail closed
         id: negative_schema_drift
         continue-on-error: true
-        uses: ORESoftware/typespec-json-schema-validator@93dd73cb246a09b0a1c62d7192cc62ca6ecbe405
+        uses: ORESoftware/typespec-json-schema-validator@a952c53b4628b1d12e21ed51879d910a8c19a581
         with:
           typespec: ${{ inputs.typespec_path }}
           schema: target/tjsv-negative-control/authored.schema.json
