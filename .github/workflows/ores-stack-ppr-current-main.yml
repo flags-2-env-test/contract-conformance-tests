@@ -1,0 +1,141 @@
+name: PPR ingress and edge authority exact-head
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ores-stack-ppr-current-main.yml'
+      - 'canaries/ores-stack-ppr-main/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ORES_STACK_SHA: 8c8632950cee3c1ed0b7230e73f40dc01c3e8d71
+  ORES_MIDDLEWARE_SHA: 1562f52f74b9555511dbba10c2bb898122c0256e
+
+jobs:
+  ores-stack-ppr-http:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact ores-stack source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ORESoftware/ores-stack
+          ref: ${{ env.ORES_STACK_SHA }}
+          persist-credentials: false
+          show-progress: false
+          fetch-depth: 1
+
+      - name: Verify exact source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$ORES_STACK_SHA"
+          git diff --check
+
+      - name: Install Rust 1.88
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.88.0
+          components: rustfmt, clippy
+
+      - name: Format strict PPR framing authority
+        run: |
+          rustfmt --edition 2024 --check \
+            crates/ores-stack-ppr-http/src/lib_strict.rs \
+            crates/ores-stack-ppr-http/src/lib.rs \
+            crates/ores-stack-ppr-http/src/request.rs
+
+      - name: Compile and test strict PPR framing authority directly
+        run: |
+          set -euo pipefail
+          rustc --edition=2024 --test -D warnings \
+            crates/ores-stack-ppr-http/src/lib_strict.rs \
+            -o /tmp/ores-stack-ppr-http-tests
+          /tmp/ores-stack-ppr-http-tests --nocapture
+
+      - name: Configure optional private Cargo Git auth
+        env:
+          ORE_SOURCE_PAT: ${{ secrets.ORE_SOURCE_PAT }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${ORE_SOURCE_PAT:-}" ]]; then
+            echo "::add-mask::$ORE_SOURCE_PAT"
+            git config --global url."https://x-access-token:${ORE_SOURCE_PAT}@github.com/".insteadOf "https://github.com/"
+            echo 'CARGO_NET_GIT_FETCH_WITH_CLI=true' >> "$GITHUB_ENV"
+          fi
+
+      - name: Cargo check and clippy focused PPR crate
+        run: |
+          set -euo pipefail
+          bash scripts/bootstrap-cargo-lock.sh ensure
+          cargo check --locked -p ores-stack-ppr-http --all-targets
+          cargo clippy --locked -p ores-stack-ppr-http --all-targets -- -D warnings
+
+      - name: Remove temporary auth rewrite
+        if: ${{ always() }}
+        run: |
+          set +e
+          git config --global --get-regexp '^url\..*\.insteadOf$' | cut -d' ' -f1 | while read -r key; do
+            case "$key" in
+              url.https://x-access-token:*@github.com/.insteadOf) git config --global --unset-all "$key" ;;
+            esac
+          done
+          exit 0
+
+  ores-middleware-edge-authority:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact ores-middleware source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ORESoftware/ores-middleware
+          ref: ${{ env.ORES_MIDDLEWARE_SHA }}
+          persist-credentials: false
+          show-progress: false
+          fetch-depth: 1
+
+      - name: Verify exact source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$ORES_MIDDLEWARE_SHA"
+          git diff --check
+
+      - name: Install pinned Rust 1.95
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+
+      - name: Configure optional private Cargo Git auth
+        env:
+          ORE_SOURCE_PAT: ${{ secrets.ORE_SOURCE_PAT }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${ORE_SOURCE_PAT:-}" ]]; then
+            echo "::add-mask::$ORE_SOURCE_PAT"
+            git config --global url."https://x-access-token:${ORE_SOURCE_PAT}@github.com/".insteadOf "https://github.com/"
+            echo 'CARGO_NET_GIT_FETCH_WITH_CLI=true' >> "$GITHUB_ENV"
+          fi
+
+      - name: Format edge-minimal authority
+        run: rustfmt --edition 2024 --check src/rust/src/hosts/edge_minimal_local.rs
+
+      - name: Clippy edge-minimal authority
+        run: cargo clippy --locked --manifest-path src/rust/Cargo.toml --no-default-features --lib -- -D warnings
+
+      - name: Test local edge-minimal authority
+        run: cargo test --locked --manifest-path src/rust/Cargo.toml --no-default-features --lib edge_minimal_local -- --nocapture
+
+      - name: Remove temporary auth rewrite
+        if: ${{ always() }}
+        run: |
+          set +e
+          git config --global --get-regexp '^url\..*\.insteadOf$' | cut -d' ' -f1 | while read -r key; do
+            case "$key" in
+              url.https://x-access-token:*@github.com/.insteadOf) git config --global --unset-all "$key" ;;
+            esac
+          done
+          exit 0
