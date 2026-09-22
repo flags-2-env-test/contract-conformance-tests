@@ -1,0 +1,65 @@
+name: ores-stack PPR current-main exact-head
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ores-stack-ppr-current-main.yml'
+      - 'canaries/ores-stack-ppr-main/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PRODUCT_SHA: bc0f0927a8ea99f340161a6b7a8027b7274bc61f
+
+jobs:
+  certify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact ores-stack source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ORESoftware/ores-stack
+          ref: ${{ env.PRODUCT_SHA }}
+          persist-credentials: false
+          show-progress: false
+          fetch-depth: 1
+
+      - name: Verify exact source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$PRODUCT_SHA"
+          git diff --check
+
+      - name: Install Rust 1.88
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.88.0
+          components: rustfmt, clippy
+
+      - name: Bootstrap exact lockfile
+        run: bash scripts/bootstrap-cargo-lock.sh ensure
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Compile PPR substrate and workspace
+        run: |
+          set -euo pipefail
+          cargo check --locked -p ores-stack-ppr-http --all-targets
+          cargo check --locked -p ores-stack-process-tree --all-targets
+          cargo check --locked --workspace --all-targets
+
+      - name: Strict clippy on PPR substrate
+        run: |
+          set -euo pipefail
+          cargo clippy --locked -p ores-stack-ppr-http --all-targets -- -D warnings
+          cargo clippy --locked -p ores-stack-process-tree --all-targets -- -D warnings
+
+      - name: Test strict framing and process-tree authority
+        run: |
+          set -euo pipefail
+          cargo test --locked -p ores-stack-ppr-http -- --nocapture
+          cargo test --locked -p ores-stack-process-tree -- --nocapture
