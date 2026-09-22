@@ -374,12 +374,15 @@ fn string_inputs(values: Dict(String, String)) -> Dict(String, EntryInput) {
   })
 }
 
-fn resolve(map: ReactiveMap, key: String) -> Option(ResolvedEntry) {
-  let winner =
-    map.layers
-    |> dict.values
-    |> list.fold(None, fn(winner, layer) {
-      case dict.get(layer.entries, key) {
+fn choose_winner(
+  layers: List(Layer),
+  key: String,
+  winner: Option(#(Layer, RawEntry)),
+) -> Option(#(Layer, RawEntry)) {
+  case layers {
+    [] -> winner
+    [layer, ..rest] -> {
+      let next = case dict.get(layer.entries, key) {
         Error(_) -> winner
         Ok(raw) ->
           case winner {
@@ -398,7 +401,13 @@ fn resolve(map: ReactiveMap, key: String) -> Option(ResolvedEntry) {
             }
           }
       }
-    })
+      choose_winner(rest, key, next)
+    }
+  }
+}
+
+fn resolve(map: ReactiveMap, key: String) -> Option(ResolvedEntry) {
+  let winner = choose_winner(dict.values(map.layers), key, None)
 
   case winner {
     None -> None
