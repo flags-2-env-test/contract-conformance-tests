@@ -1,0 +1,17 @@
+name = "ores_reactive_maps"
+version = "0.1.0"
+description = "Layered reactive key/value maps with deterministic precedence and source metadata"
+licences = ["MIT"]
+gleam = ">= 1.15.4"
+target = "erlang"
+
+[repository]
+type = "github"
+user = "ORESoftware"
+repo = "ores-reactive-maps"
+
+[dependencies]
+gleam_stdlib = ">= 0.60.0 and < 2.0.0"
+
+[dev-dependencies]
+gleeunit = ">= 1.2.0 and < 2.0.0"
