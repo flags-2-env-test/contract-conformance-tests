@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  PRODUCT_SHA: 2d6a26b8542d9d0273aea8c8599ececd9a3f4efd
+  PRODUCT_SHA: 029d499318707e5ac7b84c0784a8513b49c795a0
 
 jobs:
   certify:
