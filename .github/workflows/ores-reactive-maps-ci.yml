@@ -1,0 +1,80 @@
+name: ores-reactive-maps cross-org validation
+
+on:
+  pull_request:
+    paths:
+      - 'fixtures/ores-reactive-maps/**'
+      - '.github/workflows/ores-reactive-maps-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore exact source snapshot
+        run: |
+          mkdir -p fixtures/ores-reactive-maps/work
+          base64 -d fixtures/ores-reactive-maps/source.tar.gz.b64 > /tmp/ores-reactive-maps.tar.gz
+          tar -xzf /tmp/ores-reactive-maps.tar.gz -C fixtures/ores-reactive-maps/work
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: TypeScript tests
+        working-directory: fixtures/ores-reactive-maps/work/src/typescript
+        run: |
+          npm install --ignore-scripts
+          npm test
+          npm run build
+
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore exact source snapshot
+        run: |
+          mkdir -p fixtures/ores-reactive-maps/work
+          base64 -d fixtures/ores-reactive-maps/source.tar.gz.b64 > /tmp/ores-reactive-maps.tar.gz
+          tar -xzf /tmp/ores-reactive-maps.tar.gz -C fixtures/ores-reactive-maps/work
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: fixtures/ores-reactive-maps/work/src/go/go.mod
+      - name: Go race tests
+        working-directory: fixtures/ores-reactive-maps/work/src/go
+        run: go test -race ./...
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore exact source snapshot
+        run: |
+          mkdir -p fixtures/ores-reactive-maps/work
+          base64 -d fixtures/ores-reactive-maps/source.tar.gz.b64 > /tmp/ores-reactive-maps.tar.gz
+          tar -xzf /tmp/ores-reactive-maps.tar.gz -C fixtures/ores-reactive-maps/work
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Rust tests
+        working-directory: fixtures/ores-reactive-maps/work/src/rust
+        run: cargo test --all-targets
+
+  gleam:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore exact source snapshot
+        run: |
+          mkdir -p fixtures/ores-reactive-maps/work
+          base64 -d fixtures/ores-reactive-maps/source.tar.gz.b64 > /tmp/ores-reactive-maps.tar.gz
+          tar -xzf /tmp/ores-reactive-maps.tar.gz -C fixtures/ores-reactive-maps/work
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27.3'
+          gleam-version: '1.15.4'
+          rebar3-version: '3'
+      - name: Gleam tests
+        working-directory: fixtures/ores-reactive-maps/work/src/gleam
+        run: gleam test
