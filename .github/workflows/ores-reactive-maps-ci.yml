@@ -15,11 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Restore exact source snapshot
-        run: |
-          mkdir -p fixtures/ores-reactive-maps/work
-          base64 -d fixtures/ores-reactive-maps/source.tar.gz.b64 > /tmp/ores-reactive-maps.tar.gz
-          tar -xzf /tmp/ores-reactive-maps.tar.gz -C fixtures/ores-reactive-maps/work
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -34,11 +29,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Restore exact source snapshot
-        run: |
-          mkdir -p fixtures/ores-reactive-maps/work
-          base64 -d fixtures/ores-reactive-maps/source.tar.gz.b64 > /tmp/ores-reactive-maps.tar.gz
-          tar -xzf /tmp/ores-reactive-maps.tar.gz -C fixtures/ores-reactive-maps/work
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
@@ -51,11 +41,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Restore exact source snapshot
-        run: |
-          mkdir -p fixtures/ores-reactive-maps/work
-          base64 -d fixtures/ores-reactive-maps/source.tar.gz.b64 > /tmp/ores-reactive-maps.tar.gz
-          tar -xzf /tmp/ores-reactive-maps.tar.gz -C fixtures/ores-reactive-maps/work
       - uses: dtolnay/rust-toolchain@stable
       - name: Rust tests
         working-directory: fixtures/ores-reactive-maps/work/src/rust
@@ -65,11 +50,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Restore exact source snapshot
-        run: |
-          mkdir -p fixtures/ores-reactive-maps/work
-          base64 -d fixtures/ores-reactive-maps/source.tar.gz.b64 > /tmp/ores-reactive-maps.tar.gz
-          tar -xzf /tmp/ores-reactive-maps.tar.gz -C fixtures/ores-reactive-maps/work
       - uses: erlef/setup-beam@v1
         with:
           otp-version: '27.3'
