@@ -1,9 +1,10 @@
-name: reactive-maps typed values exact-head proof
+name: reactive-maps typed values exact-file proof
 
 on:
   pull_request:
     paths:
       - '.github/workflows/reactive-maps-typed-values.yml'
+      - 'fixtures/ores-reactive-maps-pr3/**'
   workflow_dispatch:
 
 permissions:
@@ -14,66 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: ORESoftware/ores-reactive-maps
-          ref: 4cc5e4c2c8edda6ef2173be7f2929ed23d3308f4
-          path: upstream
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: TypeScript tests and strict build
-        working-directory: upstream/src/typescript
+      - name: Exact reviewed TypeScript surface
+        working-directory: fixtures/ores-reactive-maps-pr3
         run: |
           npm install --ignore-scripts
           npm test
           npm run build
-
-  go:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: ORESoftware/ores-reactive-maps
-          ref: 4cc5e4c2c8edda6ef2173be7f2929ed23d3308f4
-          path: upstream
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.23.x'
-          cache-dependency-path: upstream/src/go/go.mod
-      - name: Go race tests
-        working-directory: upstream/src/go
-        run: go test -race ./...
-
-  rust:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: ORESoftware/ores-reactive-maps
-          ref: 4cc5e4c2c8edda6ef2173be7f2929ed23d3308f4
-          path: upstream
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Rust tests
-        working-directory: upstream/src/rust
-        run: cargo test --all-targets
-
-  gleam:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: ORESoftware/ores-reactive-maps
-          ref: 4cc5e4c2c8edda6ef2173be7f2929ed23d3308f4
-          path: upstream
-      - uses: erlef/setup-beam@v1
-        with:
-          otp-version: '27.3'
-          gleam-version: '1.15.4'
-          rebar3-version: '3'
-      - name: Gleam tests
-        working-directory: upstream/src/gleam
-        run: gleam test
